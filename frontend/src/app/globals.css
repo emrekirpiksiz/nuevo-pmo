@@ -1,0 +1,53 @@
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+.editor-content {
+  min-height: 400px;
+  padding: 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  background: #fff;
+  line-height: 1.7;
+}
+.editor-content h1 { font-size: 28px; margin: 16px 0 8px; }
+.editor-content h2 { font-size: 22px; margin: 14px 0 6px; }
+.editor-content h3 { font-size: 18px; margin: 12px 0 6px; }
+.editor-content p { margin: 0 0 8px; }
+.editor-content ul, .editor-content ol { margin: 8px 0 8px 24px; }
+.editor-content blockquote {
+  border-left: 3px solid #d9d9d9;
+  padding-left: 12px;
+  color: #595959;
+  margin: 8px 0;
+}
+.editor-content pre {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 6px;
+  overflow: auto;
+}
+.editor-content code {
+  background: #f5f5f5;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.editor-content .ProseMirror:focus {
+  outline: none;
+}
+.editor-content .has-comment {
+  background: rgba(255, 229, 100, 0.35);
+  border-bottom: 2px dashed #fa8c16;
+}
+.editor-content .selected-block {
+  background: rgba(24, 144, 255, 0.08);
+}

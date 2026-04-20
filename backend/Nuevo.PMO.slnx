@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Nuevo.PMO.Api/Nuevo.PMO.Api.csproj" />
+    <Project Path="src/Nuevo.PMO.Application/Nuevo.PMO.Application.csproj" />
+    <Project Path="src/Nuevo.PMO.Domain/Nuevo.PMO.Domain.csproj" />
+    <Project Path="src/Nuevo.PMO.Infrastructure/Nuevo.PMO.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Nuevo.PMO.Api.IntegrationTests/Nuevo.PMO.Api.IntegrationTests.csproj" />
+    <Project Path="tests/Nuevo.PMO.Application.Tests/Nuevo.PMO.Application.Tests.csproj" />
+    <Project Path="tests/Nuevo.PMO.Domain.Tests/Nuevo.PMO.Domain.Tests.csproj" />
+  </Folder>
+</Solution>
