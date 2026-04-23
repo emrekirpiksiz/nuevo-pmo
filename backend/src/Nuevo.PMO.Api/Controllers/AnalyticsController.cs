@@ -12,11 +12,9 @@ public class ViewEventsController : ControllerBase
     private readonly IMediator _mediator;
     public ViewEventsController(IMediator mediator) { _mediator = mediator; }
 
-    public record StartViewBody(Guid VersionId);
-
     [HttpPost("api/documents/{documentId:guid}/views")]
-    public async Task<ActionResult<StartViewResultDto>> Start(Guid documentId, [FromBody] StartViewBody body, CancellationToken ct)
-        => Ok(await _mediator.Send(new StartViewCommand(documentId, body.VersionId), ct));
+    public async Task<ActionResult<StartViewResultDto>> Start(Guid documentId, CancellationToken ct)
+        => Ok(await _mediator.Send(new StartViewCommand(documentId), ct));
 
     [HttpPost("api/documents/{documentId:guid}/views/{sessionId:guid}/heartbeat")]
     public async Task<IActionResult> Heartbeat(Guid documentId, Guid sessionId, CancellationToken ct)

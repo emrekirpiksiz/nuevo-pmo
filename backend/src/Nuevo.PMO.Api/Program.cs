@@ -139,9 +139,8 @@ app.MapControllers();
 app.MapGet("/", () => Results.Ok(new { name = "Nuevo PMO API", status = "ok" }));
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));
 
-if (app.Environment.IsDevelopment())
+using (var scope = app.Services.CreateScope())
 {
-    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     try
     {

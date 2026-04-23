@@ -31,6 +31,7 @@ public class GetCustomerUsersHandler : IRequestHandler<GetCustomerUsersQuery, Li
                 Email = u.Email,
                 DisplayName = u.DisplayName,
                 IsActive = u.IsActive,
+                IsPending = !u.IsActive && u.PasswordHash == null,
                 LastLoginAt = u.LastLoginAt,
                 CreatedAt = u.CreatedAt
             })

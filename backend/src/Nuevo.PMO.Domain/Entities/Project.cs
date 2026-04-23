@@ -15,4 +15,8 @@ public class Project : BaseEntity
 
     public ICollection<ProjectMember> Members { get; set; } = new List<ProjectMember>();
     public ICollection<Document> Documents { get; set; } = new List<Document>();
+
+    public ProjectPlan? Plan { get; set; }
+    public ICollection<ProjectPlanSnapshot> PlanSnapshots { get; set; } = new List<ProjectPlanSnapshot>();
+    public ICollection<ProjectReport> Reports { get; set; } = new List<ProjectReport>();
 }

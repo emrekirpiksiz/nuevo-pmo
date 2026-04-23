@@ -1,0 +1,51 @@
+---
+description: Backend C# konvansiyonları — Clean Architecture, MediatR, EF Core
+globs: backend/**/*.cs
+alwaysApply: false
+---
+
+# Backend Konvansiyonları
+
+## Katman Sorumlulukları
+
+- **Controller** sadece `IMediator.Send()` çağırır, iş mantığı içermez
+- **Application/Features** → her özellik kendi klasöründe: Queries, Commands, DTOs
+- **Domain** → Entity, Value Object, Enum — EF Core veya başka bağımlılık yok
+- **Infrastructure** → EF Core, dış servisler (JWT, DOCX, O365, email)
+
+## Yeni Özellik Eklerken
+
+1. `Domain/Entities/` → entity ekle (`BaseEntity` extend et)
+2. `IAppDbContext` arayüzüne `DbSet<T>` ekle
+3. `AppDbContext` + `Persistence/Configurations/` → Fluent config
+4. `Application/Features/<Feature>/` → Query/Command handler + FluentValidation
+5. `Api/Controllers/` → controller metodu ekle
+
+## BaseEntity
+
+Tüm entityler `BaseEntity`'den türer: `Id` (Guid), `CreatedAt`, `UpdatedAt`, `IsDeleted`, `DeletedAt`.  
+**Soft delete** query filter'ları `AppDbContext`'te global tanımlıdır — silme işlemlerinde `IsDeleted = true` set et.
+
+## MediatR Pipeline
+
+`LoggingBehavior` → `ValidationBehavior` → `AuditBehavior` → Handler  
+Validasyon için `FluentValidation.AbstractValidator<TCommand>` kullan, ayrı sınıf yaz.
+
+## Auth Attribute'ları
+
+```csharp
+[Authorize(Policy = "NuevoOnly")]   // Nuevo çalışanı
+[Authorize(Policy = "CustomerOnly")] // Müşteri kullanıcı
+[Authorize]                          // Her ikisi de (ProjectMember gibi)
+```
+
+## EF Core Kuralları
+
+- Schema: `"pmo"` — tüm tablolar bu schema altında
+- Navigation property'ler lazy değil, explicit `Include()` ile yükle
+- Multi-tenant filter: `Project`, `User`, `Customer`, `Invitation` entitylerinde kiracı filtresi var
+
+## Dosya İsimlendirme
+
+- Feature klasörü: `<EntityName>Feature.cs` (tek dosyada query+command) veya `<Entity>Queries.cs` / `<Entity>Commands.cs` ayrı
+- Controller: `<Entity>sController.cs`

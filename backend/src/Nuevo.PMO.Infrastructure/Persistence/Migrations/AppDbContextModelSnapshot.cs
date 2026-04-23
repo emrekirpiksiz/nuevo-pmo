@@ -113,6 +113,9 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("DocumentId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ForVersionId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -131,14 +134,11 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("VersionId")
-                        .HasColumnType("uuid");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("Status");
+                    b.HasIndex("ForVersionId");
 
-                    b.HasIndex("VersionId");
+                    b.HasIndex("Status");
 
                     b.HasIndex("DocumentId", "BlockId");
 
@@ -232,31 +232,45 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("ApprovedVersionId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("CurrentDraftVersionId")
+                    b.Property<int>("CurrentMajor")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("CustomerVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CustomerVersionMarkedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CustomerVersionMarkedBy")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DraftContentJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("DraftContentMarkdown")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DraftUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DraftUpdatedBy")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("PublishedCount")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("PublishedVersionId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Title")
@@ -275,13 +289,9 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ApprovedVersionId");
-
-                    b.HasIndex("CurrentDraftVersionId");
+                    b.HasIndex("CustomerVersionId");
 
                     b.HasIndex("ProjectId");
-
-                    b.HasIndex("PublishedVersionId");
 
                     b.ToTable("documents", "pmo");
                 });
@@ -307,6 +317,9 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("DocumentVersionId")
                         .HasColumnType("uuid");
 
@@ -327,10 +340,77 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ApprovedBy");
 
+                    b.HasIndex("DocumentId");
+
                     b.HasIndex("DocumentVersionId", "ApprovedBy")
                         .IsUnique();
 
                     b.ToTable("document_approvals", "pmo");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.DocumentBlockChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BlockId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FromVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NewText")
+                        .HasMaxLength(8192)
+                        .HasColumnType("character varying(8192)");
+
+                    b.Property<string>("OldText")
+                        .HasMaxLength(8192)
+                        .HasColumnType("character varying(8192)");
+
+                    b.Property<Guid?>("RelatedCommentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ToVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromVersionId");
+
+                    b.HasIndex("RelatedCommentId");
+
+                    b.HasIndex("ToVersionId");
+
+                    b.HasIndex("DocumentId", "ToVersionId");
+
+                    b.ToTable("document_block_changes", "pmo");
                 });
 
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.DocumentVersion", b =>
@@ -362,20 +442,15 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("IsPublished")
-                        .HasColumnType("boolean");
+                    b.Property<string>("Label")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<int>("Major")
                         .HasColumnType("integer");
 
                     b.Property<int>("Minor")
                         .HasColumnType("integer");
-
-                    b.Property<DateTime?>("PublishedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("PublishedBy")
-                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -412,9 +487,6 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("DocumentId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("DocumentVersionId")
-                        .HasColumnType("uuid");
-
                     b.Property<int>("DurationSeconds")
                         .HasColumnType("integer");
 
@@ -441,14 +513,12 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DocumentVersionId");
+                    b.HasIndex("DocumentId");
 
                     b.HasIndex("SessionId")
                         .IsUnique();
 
                     b.HasIndex("UserId");
-
-                    b.HasIndex("DocumentId", "DocumentVersionId");
 
                     b.ToTable("document_view_events", "pmo");
                 });
@@ -511,6 +581,211 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("invitations", "pmo");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActionUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<Guid?>("CommentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommentId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("DocumentId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("RecipientId");
+
+                    b.HasIndex("RecipientId", "IsRead");
+
+                    b.ToTable("notifications", "pmo");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.PlanMilestone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("Deadline")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProjectPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectPlanId", "Type", "Order");
+
+                    b.ToTable("plan_milestones", "pmo");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.PlanStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("ActualManDays")
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("EndYearWeek")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParentStepId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("PlannedManDays")
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<int>("Progress")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProjectPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StartYearWeek")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentStepId");
+
+                    b.HasIndex("ProjectPlanId", "Order");
+
+                    b.ToTable("plan_steps", "pmo");
                 });
 
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.Project", b =>
@@ -610,6 +885,139 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     b.ToTable("project_members", "pmo");
                 });
 
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.ProjectPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId")
+                        .IsUnique();
+
+                    b.ToTable("project_plans", "pmo");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.ProjectPlanSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BodyJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ChangeNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("OverallProgress")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId", "CreatedAt");
+
+                    b.ToTable("project_plan_snapshots", "pmo");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.ProjectReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("OverallProgress")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ReportDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId", "ReportDate");
+
+                    b.ToTable("project_reports", "pmo");
+                });
+
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -684,15 +1092,14 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "Version")
+                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "ForVersion")
                         .WithMany()
-                        .HasForeignKey("VersionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .HasForeignKey("ForVersionId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Document");
 
-                    b.Navigation("Version");
+                    b.Navigation("ForVersion");
                 });
 
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.CommentReply", b =>
@@ -708,14 +1115,9 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.Document", b =>
                 {
-                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "ApprovedVersion")
+                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "CustomerVersion")
                         .WithMany()
-                        .HasForeignKey("ApprovedVersionId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
-                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "CurrentDraftVersion")
-                        .WithMany()
-                        .HasForeignKey("CurrentDraftVersionId")
+                        .HasForeignKey("CustomerVersionId")
                         .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("Nuevo.PMO.Domain.Entities.Project", "Project")
@@ -724,18 +1126,9 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "PublishedVersion")
-                        .WithMany()
-                        .HasForeignKey("PublishedVersionId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
-                    b.Navigation("ApprovedVersion");
-
-                    b.Navigation("CurrentDraftVersion");
+                    b.Navigation("CustomerVersion");
 
                     b.Navigation("Project");
-
-                    b.Navigation("PublishedVersion");
                 });
 
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.DocumentApproval", b =>
@@ -746,15 +1139,56 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "DocumentVersion")
+                    b.HasOne("Nuevo.PMO.Domain.Entities.Document", "Document")
                         .WithMany("Approvals")
-                        .HasForeignKey("DocumentVersionId")
+                        .HasForeignKey("DocumentId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "DocumentVersion")
+                        .WithMany()
+                        .HasForeignKey("DocumentVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("ApprovedByUser");
 
+                    b.Navigation("Document");
+
                     b.Navigation("DocumentVersion");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.DocumentBlockChange", b =>
+                {
+                    b.HasOne("Nuevo.PMO.Domain.Entities.Document", "Document")
+                        .WithMany("BlockChanges")
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "FromVersion")
+                        .WithMany()
+                        .HasForeignKey("FromVersionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Nuevo.PMO.Domain.Entities.Comment", "RelatedComment")
+                        .WithMany()
+                        .HasForeignKey("RelatedCommentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "ToVersion")
+                        .WithMany()
+                        .HasForeignKey("ToVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Document");
+
+                    b.Navigation("FromVersion");
+
+                    b.Navigation("RelatedComment");
+
+                    b.Navigation("ToVersion");
                 });
 
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.DocumentVersion", b =>
@@ -776,12 +1210,6 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Nuevo.PMO.Domain.Entities.DocumentVersion", "DocumentVersion")
-                        .WithMany()
-                        .HasForeignKey("DocumentVersionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("Nuevo.PMO.Domain.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -789,8 +1217,6 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Document");
-
-                    b.Navigation("DocumentVersion");
 
                     b.Navigation("User");
                 });
@@ -811,6 +1237,67 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     b.Navigation("AcceptedUser");
 
                     b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.Notification", b =>
+                {
+                    b.HasOne("Nuevo.PMO.Domain.Entities.Comment", "Comment")
+                        .WithMany()
+                        .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Nuevo.PMO.Domain.Entities.Document", "Document")
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Nuevo.PMO.Domain.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Nuevo.PMO.Domain.Entities.User", "Recipient")
+                        .WithMany()
+                        .HasForeignKey("RecipientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Comment");
+
+                    b.Navigation("Document");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("Recipient");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.PlanMilestone", b =>
+                {
+                    b.HasOne("Nuevo.PMO.Domain.Entities.ProjectPlan", "ProjectPlan")
+                        .WithMany("Milestones")
+                        .HasForeignKey("ProjectPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProjectPlan");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.PlanStep", b =>
+                {
+                    b.HasOne("Nuevo.PMO.Domain.Entities.PlanStep", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentStepId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Nuevo.PMO.Domain.Entities.ProjectPlan", "ProjectPlan")
+                        .WithMany("Steps")
+                        .HasForeignKey("ProjectPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Parent");
+
+                    b.Navigation("ProjectPlan");
                 });
 
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.Project", b =>
@@ -843,6 +1330,39 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.ProjectPlan", b =>
+                {
+                    b.HasOne("Nuevo.PMO.Domain.Entities.Project", "Project")
+                        .WithOne("Plan")
+                        .HasForeignKey("Nuevo.PMO.Domain.Entities.ProjectPlan", "ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.ProjectPlanSnapshot", b =>
+                {
+                    b.HasOne("Nuevo.PMO.Domain.Entities.Project", "Project")
+                        .WithMany("PlanSnapshots")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.ProjectReport", b =>
+                {
+                    b.HasOne("Nuevo.PMO.Domain.Entities.Project", "Project")
+                        .WithMany("Reports")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.User", b =>
                 {
                     b.HasOne("Nuevo.PMO.Domain.Entities.Customer", "Customer")
@@ -869,6 +1389,10 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.Document", b =>
                 {
+                    b.Navigation("Approvals");
+
+                    b.Navigation("BlockChanges");
+
                     b.Navigation("Comments");
 
                     b.Navigation("Versions");
@@ -876,9 +1400,9 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     b.Navigation("ViewEvents");
                 });
 
-            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.DocumentVersion", b =>
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.PlanStep", b =>
                 {
-                    b.Navigation("Approvals");
+                    b.Navigation("Children");
                 });
 
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.Project", b =>
@@ -886,6 +1410,19 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     b.Navigation("Documents");
 
                     b.Navigation("Members");
+
+                    b.Navigation("Plan");
+
+                    b.Navigation("PlanSnapshots");
+
+                    b.Navigation("Reports");
+                });
+
+            modelBuilder.Entity("Nuevo.PMO.Domain.Entities.ProjectPlan", b =>
+                {
+                    b.Navigation("Milestones");
+
+                    b.Navigation("Steps");
                 });
 
             modelBuilder.Entity("Nuevo.PMO.Domain.Entities.User", b =>

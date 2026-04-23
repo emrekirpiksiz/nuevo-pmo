@@ -1,33 +1,104 @@
 "use client";
 
-import { Card, Col, Empty, Row, Tag, Typography } from "antd";
+import Link from "next/link";
+import { Empty, Skeleton } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { ProjectsApi } from "@/lib/apis";
-import Link from "next/link";
+import { useSession } from "@/lib/useSession";
+import { PageHeader } from "@/components/PageHeader";
+import { StatusPill } from "@/components/StatusPill";
 
 export default function CustomerHomePage() {
-  const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => ProjectsApi.list() });
+  const { user } = useSession();
+  const { data: projects, isLoading } = useQuery({
+    queryKey: ["projects"],
+    queryFn: () => ProjectsApi.list(),
+  });
 
   return (
-    <div>
-      <Typography.Title level={3} style={{ marginTop: 0 }}>Projeleriniz</Typography.Title>
-      {projects?.length === 0 && <Empty description="Henüz atanmış projeniz yok." />}
-      <Row gutter={[16, 16]}>
-        {projects?.map((p) => (
-          <Col xs={24} md={12} lg={8} key={p.id}>
-            <Card
-              title={<Link href={`/portal/projects/${p.id}`}>{p.name}</Link>}
-              extra={<Tag color={p.status === "Active" ? "green" : "blue"}>{p.status}</Tag>}
+    <div className="page">
+      <PageHeader
+        eyebrow={user?.customerName ?? "Müşteri Portalı"}
+        title={`Hoş geldiniz${user?.displayName ? ", " + user.displayName.split(" ")[0] : ""}.`}
+        description="Sizinle paylaşılan tüm projeler ve onayınızı bekleyen dokümanlar burada listeleniyor."
+      />
+
+      {isLoading ? (
+        <Skeleton active paragraph={{ rows: 4 }} />
+      ) : (projects?.length ?? 0) === 0 ? (
+        <div className="card" style={{ padding: 60 }}>
+          <Empty description="Henüz atanmış projeniz yok." />
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+            gap: 16,
+          }}
+        >
+          {projects!.map((p) => (
+            <Link
+              key={p.id}
+              href={`/portal/projects/${p.id}`}
+              style={{ color: "inherit", textDecoration: "none" }}
             >
-              <Typography.Text type="secondary">{p.code}</Typography.Text>
-              <div style={{ marginTop: 8 }}>{p.description ?? "—"}</div>
-              <div style={{ marginTop: 12 }}>
-                <Tag>{p.documentCount} doküman</Tag>
+              <div
+                className="card"
+                style={{
+                  padding: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                  height: "100%",
+                  cursor: "pointer",
+                  transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = "var(--border-strong)";
+                  (e.currentTarget as HTMLDivElement).style.boxShadow = "var(--shadow-sm)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = "var(--border)";
+                  (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
+                }}
+              >
+                <div className="row" style={{ justifyContent: "space-between", alignItems: "start" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="subtle mono" style={{ fontSize: 11.5 }}>{p.code}</div>
+                    <div
+                      className="serif"
+                      style={{ fontSize: 22, marginTop: 2, letterSpacing: "-0.2px" }}
+                    >
+                      {p.name}
+                    </div>
+                  </div>
+                  <StatusPill status={p.status} />
+                </div>
+                {p.description && (
+                  <div
+                    className="muted"
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {p.description}
+                  </div>
+                )}
+                <div className="row" style={{ gap: 12, marginTop: "auto" }}>
+                  <span className="pill pill-neutral">{p.documentCount} doküman</span>
+                  <span className="pill pill-neutral">{p.memberCount} üye</span>
+                </div>
               </div>
-            </Card>
-          </Col>
-        ))}
-      </Row>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

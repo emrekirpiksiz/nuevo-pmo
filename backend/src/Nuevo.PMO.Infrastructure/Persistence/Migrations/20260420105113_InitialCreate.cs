@@ -220,7 +220,6 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     DocumentId = table.Column<Guid>(type: "uuid", nullable: false),
-                    VersionId = table.Column<Guid>(type: "uuid", nullable: false),
                     BlockId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     AnchorText = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: false),
                     Body = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: false),
@@ -245,6 +244,7 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    DocumentId = table.Column<Guid>(type: "uuid", nullable: false),
                     DocumentVersionId = table.Column<Guid>(type: "uuid", nullable: false),
                     ApprovedBy = table.Column<Guid>(type: "uuid", nullable: false),
                     ApprovedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -279,9 +279,7 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     Minor = table.Column<int>(type: "integer", nullable: false),
                     ContentJson = table.Column<string>(type: "jsonb", nullable: false),
                     ContentMarkdown = table.Column<string>(type: "text", nullable: false),
-                    IsPublished = table.Column<bool>(type: "boolean", nullable: false),
-                    PublishedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    PublishedBy = table.Column<Guid>(type: "uuid", nullable: true),
+                    Label = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     CreatedBy = table.Column<Guid>(type: "uuid", nullable: true),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -303,10 +301,10 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                     ProjectId = table.Column<Guid>(type: "uuid", nullable: false),
                     Title = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     Type = table.Column<int>(type: "integer", nullable: false),
-                    CurrentDraftVersionId = table.Column<Guid>(type: "uuid", nullable: true),
-                    PublishedVersionId = table.Column<Guid>(type: "uuid", nullable: true),
-                    ApprovedVersionId = table.Column<Guid>(type: "uuid", nullable: true),
-                    PublishedCount = table.Column<int>(type: "integer", nullable: false),
+                    CurrentMajor = table.Column<int>(type: "integer", nullable: false),
+                    CustomerVersionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    CustomerVersionMarkedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CustomerVersionMarkedBy = table.Column<Guid>(type: "uuid", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     CreatedBy = table.Column<Guid>(type: "uuid", nullable: true),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -318,20 +316,8 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 {
                     table.PrimaryKey("PK_documents", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_documents_document_versions_ApprovedVersionId",
-                        column: x => x.ApprovedVersionId,
-                        principalSchema: "pmo",
-                        principalTable: "document_versions",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_documents_document_versions_CurrentDraftVersionId",
-                        column: x => x.CurrentDraftVersionId,
-                        principalSchema: "pmo",
-                        principalTable: "document_versions",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_documents_document_versions_PublishedVersionId",
-                        column: x => x.PublishedVersionId,
+                        name: "FK_documents_document_versions_CustomerVersionId",
+                        column: x => x.CustomerVersionId,
                         principalSchema: "pmo",
                         principalTable: "document_versions",
                         principalColumn: "Id");
@@ -351,7 +337,6 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     DocumentId = table.Column<Guid>(type: "uuid", nullable: false),
-                    DocumentVersionId = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     SessionId = table.Column<Guid>(type: "uuid", nullable: false),
                     OpenedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -368,13 +353,6 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_document_view_events", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_document_view_events_document_versions_DocumentVersionId",
-                        column: x => x.DocumentVersionId,
-                        principalSchema: "pmo",
-                        principalTable: "document_versions",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_document_view_events_documents_DocumentId",
                         column: x => x.DocumentId,
@@ -422,12 +400,6 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 column: "Status");
 
             migrationBuilder.CreateIndex(
-                name: "IX_comments_VersionId",
-                schema: "pmo",
-                table: "comments",
-                column: "VersionId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_customers_Name",
                 schema: "pmo",
                 table: "customers",
@@ -439,6 +411,12 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 schema: "pmo",
                 table: "document_approvals",
                 column: "ApprovedBy");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_document_approvals_DocumentId",
+                schema: "pmo",
+                table: "document_approvals",
+                column: "DocumentId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_document_approvals_DocumentVersionId_ApprovedBy",
@@ -455,16 +433,10 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_document_view_events_DocumentId_DocumentVersionId",
+                name: "IX_document_view_events_DocumentId",
                 schema: "pmo",
                 table: "document_view_events",
-                columns: new[] { "DocumentId", "DocumentVersionId" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_document_view_events_DocumentVersionId",
-                schema: "pmo",
-                table: "document_view_events",
-                column: "DocumentVersionId");
+                column: "DocumentId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_document_view_events_SessionId",
@@ -480,28 +452,16 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_documents_ApprovedVersionId",
+                name: "IX_documents_CustomerVersionId",
                 schema: "pmo",
                 table: "documents",
-                column: "ApprovedVersionId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_documents_CurrentDraftVersionId",
-                schema: "pmo",
-                table: "documents",
-                column: "CurrentDraftVersionId");
+                column: "CustomerVersionId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_documents_ProjectId",
                 schema: "pmo",
                 table: "documents",
                 column: "ProjectId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_documents_PublishedVersionId",
-                schema: "pmo",
-                table: "documents",
-                column: "PublishedVersionId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_invitations_AcceptedUserId",
@@ -584,16 +544,6 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 onDelete: ReferentialAction.Cascade);
 
             migrationBuilder.AddForeignKey(
-                name: "FK_comments_document_versions_VersionId",
-                schema: "pmo",
-                table: "comments",
-                column: "VersionId",
-                principalSchema: "pmo",
-                principalTable: "document_versions",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
-
-            migrationBuilder.AddForeignKey(
                 name: "FK_comments_documents_DocumentId",
                 schema: "pmo",
                 table: "comments",
@@ -610,6 +560,16 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 column: "DocumentVersionId",
                 principalSchema: "pmo",
                 principalTable: "document_versions",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Restrict);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_document_approvals_documents_DocumentId",
+                schema: "pmo",
+                table: "document_approvals",
+                column: "DocumentId",
+                principalSchema: "pmo",
+                principalTable: "documents",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Cascade);
 
@@ -628,19 +588,9 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
-                name: "FK_documents_document_versions_ApprovedVersionId",
+                name: "FK_document_versions_documents_DocumentId",
                 schema: "pmo",
-                table: "documents");
-
-            migrationBuilder.DropForeignKey(
-                name: "FK_documents_document_versions_CurrentDraftVersionId",
-                schema: "pmo",
-                table: "documents");
-
-            migrationBuilder.DropForeignKey(
-                name: "FK_documents_document_versions_PublishedVersionId",
-                schema: "pmo",
-                table: "documents");
+                table: "document_versions");
 
             migrationBuilder.DropTable(
                 name: "audit_logs",
@@ -675,11 +625,11 @@ namespace Nuevo.PMO.Infrastructure.Persistence.Migrations
                 schema: "pmo");
 
             migrationBuilder.DropTable(
-                name: "document_versions",
+                name: "documents",
                 schema: "pmo");
 
             migrationBuilder.DropTable(
-                name: "documents",
+                name: "document_versions",
                 schema: "pmo");
 
             migrationBuilder.DropTable(

@@ -3,17 +3,17 @@
 import { useEffect, useRef } from "react";
 import { ViewsApi } from "@/lib/apis";
 
-export function useViewTracker(documentId: string | null, versionId: string | null, enabled: boolean) {
+export function useViewTracker(documentId: string | null, enabled: boolean) {
   const sessionRef = useRef<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!enabled || !documentId || !versionId) return;
+    if (!enabled || !documentId) return;
     let aborted = false;
 
     async function start() {
       try {
-        const res = await ViewsApi.start(documentId!, versionId!);
+        const res = await ViewsApi.start(documentId!);
         if (aborted) return;
         sessionRef.current = res.sessionId;
         const ms = Math.max(5000, res.heartbeatIntervalSec * 1000);
@@ -22,9 +22,7 @@ export function useViewTracker(documentId: string | null, versionId: string | nu
             ViewsApi.heartbeat(documentId!, sessionRef.current).catch(() => {});
           }
         }, ms);
-      } catch {
-        // silently ignore
-      }
+      } catch { /* silent */ }
     }
 
     start();
@@ -52,5 +50,5 @@ export function useViewTracker(documentId: string | null, versionId: string | nu
         ViewsApi.close(documentId, sessionRef.current).catch(() => {});
       }
     };
-  }, [documentId, versionId, enabled]);
+  }, [documentId, enabled]);
 }

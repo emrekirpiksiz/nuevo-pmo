@@ -1,83 +1,94 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { Badge, Card, Descriptions, Space, Tabs, Tag, Typography } from "antd";
+import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
+import { Button, Skeleton } from "antd";
+import { ArrowLeftOutlined } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
 import { ProjectsApi } from "@/lib/apis";
 import { DocumentsPanel } from "@/features/documents/DocumentsPanel";
+import { ProjectPlanPanel } from "@/features/projectPlan/ProjectPlanPanel";
+import { StatusPill } from "@/components/StatusPill";
+
+type TabKey = "documents" | "plan";
+
+const TABS: Array<{ key: TabKey; label: string; soon?: boolean }> = [
+  { key: "documents", label: "Dokümanlar" },
+  { key: "plan", label: "Proje Planı" },
+];
 
 export default function CustomerProjectPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = params.id;
-  const { data: project } = useQuery({ queryKey: ["project", id], queryFn: () => ProjectsApi.get(id) });
+  const [tab, setTab] = useState<TabKey>("documents");
+
+  const { data: project, isLoading } = useQuery({
+    queryKey: ["project", id],
+    queryFn: () => ProjectsApi.get(id),
+  });
+
+  if (isLoading || !project) {
+    return (
+      <div className="page">
+        <Skeleton active paragraph={{ rows: 6 }} />
+      </div>
+    );
+  }
 
   return (
-    <Space direction="vertical" size="large" style={{ width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-        <div>
-          <Typography.Title level={3} style={{ margin: 0 }}>{project?.name}</Typography.Title>
-          <Typography.Text type="secondary">{project?.code}</Typography.Text>
-        </div>
-        {project && <Tag color={project.status === "Active" ? "green" : "blue"}>{project.status}</Tag>}
+    <div className="page">
+      <div style={{ marginBottom: 16 }}>
+        <Button
+          type="text"
+          size="small"
+          icon={<ArrowLeftOutlined />}
+          onClick={() => router.push("/portal")}
+          style={{ marginLeft: -8, color: "var(--ink-muted)" }}
+        >
+          Projelerim
+        </Button>
       </div>
 
-      <Card>
-        <Descriptions column={2}>
-          <Descriptions.Item label="Kod">{project?.code}</Descriptions.Item>
-          <Descriptions.Item label="Durum">{project?.status}</Descriptions.Item>
-          <Descriptions.Item label="Açıklama" span={2}>{project?.description || "—"}</Descriptions.Item>
-        </Descriptions>
-      </Card>
+      <div
+        className="page-header"
+        style={{ borderBottom: "none", paddingBottom: 0, marginBottom: 20, alignItems: "flex-start" }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="row" style={{ marginBottom: 6, gap: 8 }}>
+            <span className="mono subtle" style={{ fontSize: 11 }}>
+              {project.code}
+            </span>
+            <StatusPill status={project.status} />
+          </div>
+          <h1 className="page-title" style={{ fontSize: 36 }}>
+            {project.name}
+          </h1>
+          {project.description && (
+            <p className="page-sub" style={{ marginTop: 10 }}>
+              {project.description}
+            </p>
+          )}
+        </div>
+      </div>
 
-      <Tabs
-        defaultActiveKey="documents"
-        items={[
-          {
-            key: "documents",
-            label: "Dokümanlar",
-            children: <DocumentsPanel projectId={id} mode="customer" />,
-          },
-          {
-            key: "plan",
-            label: (
-              <span>
-                Proje Planı <Badge status="processing" text="Yakında" />
-              </span>
-            ),
-            children: <ComingSoon title="Proje Planı" description="Timeline/epic bazlı proje ilerleyişi yakında." />,
-          },
-          {
-            key: "reports",
-            label: (
-              <span>
-                Haftalık Raporlar <Badge status="processing" text="Yakında" />
-              </span>
-            ),
-            children: <ComingSoon title="Haftalık Raporlar" description="Proje ilerleme raporları yakında." />,
-          },
-          {
-            key: "tickets",
-            label: (
-              <span>
-                Tickets <Badge status="processing" text="Yakında" />
-              </span>
-            ),
-            children: <ComingSoon title="Tickets" description="Görev/ticket yönetimi yakında." />,
-          },
-        ]}
-      />
-    </Space>
-  );
-}
+      {/* Tabs */}
+      <div className="tabs" style={{ marginBottom: 20 }}>
+        {TABS.map((t) => (
+          <button
+            type="button"
+            key={t.key}
+            className={"tab" + (tab === t.key ? " active" : "") + (t.soon ? " disabled" : "")}
+            onClick={() => !t.soon && setTab(t.key)}
+          >
+            {t.label}
+            {t.soon && <span className="soon">Yakında</span>}
+          </button>
+        ))}
+      </div>
 
-function ComingSoon({ title, description }: { title: string; description: string }) {
-  return (
-    <Card>
-      <Space direction="vertical" size="small">
-        <Typography.Title level={4} style={{ margin: 0 }}>{title}</Typography.Title>
-        <Typography.Text type="secondary">{description}</Typography.Text>
-        <Tag color="blue">Coming Soon</Tag>
-      </Space>
-    </Card>
+      {tab === "documents" && <DocumentsPanel projectId={id} mode="customer" />}
+      {tab === "plan" && <ProjectPlanPanel projectId={id} mode="customer" />}
+    </div>
   );
 }

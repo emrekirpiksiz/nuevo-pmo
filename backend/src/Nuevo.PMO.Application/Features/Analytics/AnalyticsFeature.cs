@@ -19,7 +19,7 @@ public class StartViewResultDto
     public int HeartbeatIntervalSec { get; set; }
 }
 
-public record StartViewCommand(Guid DocumentId, Guid VersionId) : IRequest<StartViewResultDto>;
+public record StartViewCommand(Guid DocumentId) : IRequest<StartViewResultDto>;
 
 public class StartViewHandler : IRequestHandler<StartViewCommand, StartViewResultDto>
 {
@@ -37,13 +37,9 @@ public class StartViewHandler : IRequestHandler<StartViewCommand, StartViewResul
         AuthorizationHelper.EnsureAuthenticated(_user);
         await AuthorizationHelper.EnsureDocumentAccessAsync(_db, _user, request.DocumentId, ct);
 
-        var version = await _db.DocumentVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == request.VersionId && v.DocumentId == request.DocumentId, ct)
-            ?? throw new NotFoundException("DocumentVersion", request.VersionId);
-
         var ev = new DocumentViewEvent
         {
             DocumentId = request.DocumentId,
-            DocumentVersionId = version.Id,
             UserId = _user.UserId!.Value,
             SessionId = Guid.NewGuid(),
             OpenedAt = DateTime.UtcNow,
@@ -112,17 +108,6 @@ public class AnalyticsReportDto
     public int TotalViews { get; set; }
     public int UniqueViewers { get; set; }
     public int TotalDurationSeconds { get; set; }
-    public List<AnalyticsVersionDto> ByVersion { get; set; } = new();
-}
-
-public class AnalyticsVersionDto
-{
-    public Guid VersionId { get; set; }
-    public string VersionNumber { get; set; } = string.Empty;
-    public bool IsPublished { get; set; }
-    public int ViewCount { get; set; }
-    public int UniqueViewers { get; set; }
-    public int TotalDurationSeconds { get; set; }
     public List<AnalyticsViewerDto> Viewers { get; set; } = new();
 }
 
@@ -151,7 +136,6 @@ public class GetDocumentAnalyticsHandler : IRequestHandler<GetDocumentAnalyticsQ
         await AuthorizationHelper.EnsureDocumentAccessAsync(_db, _user, request.DocumentId, ct);
 
         var events = await _db.DocumentViewEvents
-            .Include(e => e.DocumentVersion)
             .Include(e => e.User)
             .Where(e => e.DocumentId == request.DocumentId)
             .ToListAsync(ct);
@@ -161,31 +145,18 @@ public class GetDocumentAnalyticsHandler : IRequestHandler<GetDocumentAnalyticsQ
             DocumentId = request.DocumentId,
             TotalViews = events.Count,
             UniqueViewers = events.Select(e => e.UserId).Distinct().Count(),
-            TotalDurationSeconds = events.Sum(e => e.DurationSeconds)
+            TotalDurationSeconds = events.Sum(e => e.DurationSeconds),
+            Viewers = events.GroupBy(e => e.User)
+                .Select(g => new AnalyticsViewerDto
+                {
+                    UserId = g.Key.Id,
+                    UserName = g.Key.DisplayName,
+                    UserEmail = g.Key.Email,
+                    SessionCount = g.Count(),
+                    TotalDurationSeconds = g.Sum(e => e.DurationSeconds),
+                    LastViewedAt = g.Max(e => e.LastHeartbeatAt)
+                }).OrderByDescending(x => x.TotalDurationSeconds).ToList()
         };
-
-        report.ByVersion = events
-            .GroupBy(e => e.DocumentVersion)
-            .OrderByDescending(g => g.Key.Major).ThenByDescending(g => g.Key.Minor)
-            .Select(g => new AnalyticsVersionDto
-            {
-                VersionId = g.Key.Id,
-                VersionNumber = $"{g.Key.Major}.{g.Key.Minor}",
-                IsPublished = g.Key.IsPublished,
-                ViewCount = g.Count(),
-                UniqueViewers = g.Select(e => e.UserId).Distinct().Count(),
-                TotalDurationSeconds = g.Sum(e => e.DurationSeconds),
-                Viewers = g.GroupBy(e => e.User)
-                    .Select(ug => new AnalyticsViewerDto
-                    {
-                        UserId = ug.Key.Id,
-                        UserName = ug.Key.DisplayName,
-                        UserEmail = ug.Key.Email,
-                        SessionCount = ug.Count(),
-                        TotalDurationSeconds = ug.Sum(e => e.DurationSeconds),
-                        LastViewedAt = ug.Max(e => e.LastHeartbeatAt)
-                    }).ToList()
-            }).ToList();
         return report;
     }
 }

@@ -25,10 +25,13 @@ api.interceptors.response.use(
       clearAuth();
       if (typeof window !== "undefined") {
         const current = window.location.pathname;
-        if (!current.startsWith("/admin/login") && !current.startsWith("/login") && !current.startsWith("/accept-invite")) {
-          window.location.href = current.startsWith("/admin")
-            ? "/admin/login"
-            : "/login";
+        if (
+          !current.startsWith("/admin/login") &&
+          !current.startsWith("/admin/callback") &&
+          !current.startsWith("/login") &&
+          !current.startsWith("/accept-invite")
+        ) {
+          window.location.href = "/admin/login";
         }
       }
     }

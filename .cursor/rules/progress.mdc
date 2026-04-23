@@ -1,0 +1,84 @@
+---
+description: Proje ilerleme takibi — tamamlananlar, devam edenler, sıradakiler
+alwaysApply: true
+---
+
+# Proje İlerleme Takibi
+
+> **Güncelleme Talimatı:** Her çalışma oturumu sonunda bu dosyayı güncelle.  
+> Tamamlanan işleri `✅`'e çevir, yeni bilinenleri ekle, sıradaki adımları düzenle.
+
+## Genel Durum
+
+Proje aktif geliştirme aşamasında. Temel altyapı (auth, projeler, dokümanlar, yorumlar, bildirimler) tamamlandı. Polish çalışması yapıldı: branding, menü yapısı, arama, panel içeriği güncellendi.
+
+---
+
+## ✅ Tamamlananlar
+
+### Backend
+- Auth sistemi (JWT, O365 PKCE gerçek entegrasyon, davet, müşteri/admin rolleri)
+- Customer & User yönetimi (CRUD, davet akışı — davet anında **pending user** oluşturuluyor, accept ile aktive ediliyor)
+- O365 SMTP entegrasyonu (`ai@nuevo.com.tr` hesabından davet mailleri — `appsettings.json`'daki `Smtp.Password` alanı doldurulmalı)
+- Project yönetimi (CRUD, üyeler, roller)
+- Document sistemi (draft/publish modeli, versiyonlama, DOCX export)
+- Comment sistemi (blok bazlı anchor, reply, resolve/reopen, manuel çözüm)
+- DocumentViewEvent (view session başlat/heartbeat/kapat — analytics için)
+- DocumentBlockChange (blok değişiklik takibi)
+- DocumentApproval (doküman onaylama akışı)
+- AuditLog (MediatR pipeline behavior ile otomatik)
+- **ProjectPlan** (PlanStep, PlanMilestone, snapshot geçmişi)
+- **ProjectReport** (rapor oluşturma, template)
+- **Notification** sistemi (DB + SMTP mail; `INotificationSender`, `NotificationsController`, `NotificationFeature`)
+- Migration: `20260422121431_ProjectPlanAndReports`, `20260423200344_AddNotifications`
+
+### Frontend
+- AppShell + Sidebar + Topbar layout sistemi
+- **Birleşik giriş ekranı** (`/admin/login`) — O365 + müşteri email/parola tek ekranda; `/` ve `/login` buraya redirect
+- **O365 callback sayfası** (`/admin/callback`) — PKCE state/verifier `sessionStorage` üzerinden
+- Admin: customers, projects, project detail, document editor
+- Portal: project list, project detail, document editor
+- DocumentEditor (TipTap, markdown, block ID'ler)
+- CommentsPanel + CommentDrawer + comment navigasyon
+- AnalyticsView (görüntülenme istatistikleri)
+- ChangesView (blok değişiklik geçmişi)
+- **ProjectPlanPanel** (Gantt, milestones, timeline, plan history)
+- **ReportDrawer + ReportsList** (proje raporları)
+- **NotificationsBell** (topbar çan + badge + popover dropdown, 30sn polling)
+- **InboxView** (`/admin/inbox` ve `/portal/inbox`) — filtreler (Tümü/Okunmamış/Yorumlar/Dokümanlar), proje bazlı gruplama, tek tek/toplu okundu
+- Admin stub sayfaları: `/admin/documents`, `/admin/comments`, `/admin/analytics`, `/admin/plan`, `/admin/reports`, `/admin/tickets`
+- **Polish**: Sidebar'da `nuevo-logo.svg` kullanımı; `exact` aktif-item fix (Panel+Projeler aynı anda aktif sorunu); Dokümanlar/Yorumlar menüden kaldırıldı; Workspace bölümü kaldırıldı, Raporlar/Tickets/Analitik primary'ye alındı; GlobalSearch (⌘K) command palette; Topbar'da müşteri tarafında search gizlendi; Müşteriden Beklenenler plan milestone'larından besleniyor; Son Aktiviteler notifications feed'den; Mail şablonları yenilendi; SEO title "Nuevo Project Management Portal (PMP)" yapıldı
+
+---
+
+## 🔄 Devam Eden / Kısmen Yapılanlar
+
+- Admin analytics sayfası (`/admin/analytics`) — stub durumunda, backend endpoint var
+- Admin comments sayfası (`/admin/comments`) — stub durumunda
+- Admin plan (`/admin/plan`) — stub durumunda (proje bazlı plan zaten çalışıyor)
+- Admin reports (`/admin/reports`) — stub durumunda
+
+---
+
+## 📋 Sıradaki Olası Adımlar
+
+- Stub admin sayfalarını (`analytics`, `comments`, `plan`, `reports`) gerçek içerikle doldurma
+- Portal tarafında proje planı ve rapor görünümü (müşteri için)
+- Notification real-time (şu an 30sn polling; gerekirse SignalR/SSE)
+- Notification kapsamını genişletme (mention, approval, resolve/reopen bildirimleri vs.)
+- Test coverage artırma (`backend/tests/`)
+- O365 e-posta domain kısıtlaması (`O365LoginCommand` şu an tenant'taki her hesabı Nuevo admin olarak yaratıyor — `@nuevo.com.tr` dışı reddedilebilir)
+- `Smtp.Password` yerine Microsoft Graph `Mail.Send` ile şifresiz gönderime geçme seçeneği
+
+---
+
+## Teknik Notlar
+
+- `AnalyticsController.cs` dosyasında sınıf adı `ViewEventsController` — uyumsuzluk mevcut
+- Draft/Publish akışı: Document entity'de `DraftContent` + `PublishedVersionId` ayrımı var
+- Comment anchor: TipTap block ID'leri + `DocumentBlockChange` ile blok değişimlerinde comment'lar taşınıyor
+- Plan snapshot: Plan her güncellendiğinde `ProjectPlanSnapshot` kaydediliyor (geçmiş için)
+- **Davet akışı:** `CreateInvitationCommand` aynı transaction'da pending `User` (`IsActive=false`, `PasswordHash=null`) yaratır. `AcceptInvitationCommand` mevcut pending user'ı aktifleştirir — yeni kullanıcı yaratmaz. Kullanıcı listesinde pending durumu `IsPending` alanı ile "Davet beklemede" rozeti olarak gösterilir.
+- **O365 PKCE:** Frontend `code_verifier` + `state`'i `sessionStorage`'a yazar, `/admin/callback` tek seferlik okuyup siler. Azure AD'de redirect URI **Web** platformu olarak kayıtlı olmalı (SPA tipi `client_secret` reddediyor).
+- **O365 config:** `appsettings.json` > `O365` (TenantId/ClientId/ClientSecret/RedirectUri) + `Smtp` (Office 365 SMTP ayarları — `ai@nuevo.com.tr`, port 587, STARTTLS). Tenant'ta SMTP AUTH açık olmalı.
+- **Notification akışı:** `INotificationSender.SendAsync` hem DB kaydı (`pmo.notifications`) hem SMTP mail atar; mail hatası ana akışı kesmez (log + swallow). `ActionUrl` admin/portal ayrımıyla `App.PublicUrl` üzerinden üretilir, tıklandığında `markRead` + `router.push`. Tetikleyiciler: `PublishCustomerVersionHandler` (müşteri proje üyelerine), `CreateCommentHandler`/`AddReplyHandler` (karşı taraf + reply'da orijinal yorum sahibi). Frontend polling: bell 30sn, inbox 60sn.

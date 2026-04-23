@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1400"/>
+<title>Nuevo PMO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/app.css"/>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+window.TWEAKS = /*EDITMODE-BEGIN*/{
+  "accent": "clay",
+  "density": "balanced",
+  "sidebar": "dark",
+  "theme": "light"
+}/*EDITMODE-END*/;
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="src/data.js"></script>
+<script src="src/theme.js"></script>
+<script type="text/babel" src="src/icons.jsx"></script>
+<script type="text/babel" src="src/shell.jsx"></script>
+<script type="text/babel" src="src/page_dashboard.jsx"></script>
+<script type="text/babel" src="src/page_customers.jsx"></script>
+<script type="text/babel" src="src/page_projects.jsx"></script>
+<script type="text/babel" src="src/page_document.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const ACCENTS = {
+  clay: { accent: '#8a6d3b', accentSoft: '#f0e6d2', accentInk: '#5a4721' },
+  sage: { accent: '#6b7a5a', accentSoft: '#e6ebdb', accentInk: '#3e4934' },
+  navy: { accent: '#3b5a8a', accentSoft: '#dde4ef', accentInk: '#1f3459' },
+  terra: { accent: '#935d4c', accentSoft: '#eddcd4', accentInk: '#5c3225' },
+};
+
+function applyTweaks(t) {
+  const a = ACCENTS[t.accent] || ACCENTS.clay;
+  const r = document.documentElement;
+  r.style.setProperty('--accent', a.accent);
+  r.style.setProperty('--accent-soft', a.accentSoft);
+  r.style.setProperty('--accent-ink', a.accentInk);
+  document.body.classList.toggle('theme-dark', t.theme === 'dark');
+  document.body.classList.toggle('sidebar-light', t.sidebar === 'light');
+  if (t.sidebar === 'light') {
+    r.style.setProperty('--sidebar-bg', '#f5f2ec');
+    r.style.setProperty('--sidebar-text', '#5a5852');
+    r.style.setProperty('--sidebar-text-strong', '#1a1d21');
+    r.style.setProperty('--sidebar-border', '#e6e1d5');
+    r.style.setProperty('--sidebar-active', '#ffffff');
+    r.style.setProperty('--sidebar-active-ink', '#1a1d21');
+  } else {
+    r.style.removeProperty('--sidebar-bg');
+    r.style.removeProperty('--sidebar-text');
+    r.style.removeProperty('--sidebar-text-strong');
+    r.style.removeProperty('--sidebar-border');
+    r.style.removeProperty('--sidebar-active');
+    r.style.removeProperty('--sidebar-active-ink');
+  }
+  if (t.density === 'compact') {
+    r.style.setProperty('--row-h', '36px');
+  } else {
+    r.style.removeProperty('--row-h');
+  }
+}
+
+function TweaksPanel({ tweaks, setTweaks, open }) {
+  if (!open) return null;
+  const upd = (k, v) => {
+    const next = { ...tweaks, [k]: v };
+    setTweaks(next);
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [k]: v } }, '*');
+  };
+  return (
+    <div className="tweaks-panel on">
+      <div className="tweaks-h">Tweaks <span className="subtle" style={{fontSize: 11, fontFamily: 'var(--font-sans)'}}>Nuevo PMO</span></div>
+      <div className="tweaks-sub">Tema, renk, yoğunluk ve sidebar varyasyonlarını deneyin.</div>
+
+      <div className="tweak-row">
+        <label>Tema</label>
+        <div className="tweak-seg">
+          {['light','dark'].map(v => <button key={v} className={tweaks.theme===v?'on':''} onClick={() => upd('theme', v)}>{v==='light'?'Açık':'Koyu'}</button>)}
+        </div>
+      </div>
+
+      <div className="tweak-row">
+        <label>Sidebar</label>
+        <div className="tweak-seg">
+          {['dark','light'].map(v => <button key={v} className={tweaks.sidebar===v?'on':''} onClick={() => upd('sidebar', v)}>{v==='dark'?'Koyu':'Açık'}</button>)}
+        </div>
+      </div>
+
+      <div className="tweak-row">
+        <label>Aksan Rengi</label>
+        <div className="tweak-swatches">
+          {Object.entries(ACCENTS).map(([k,v]) => (
+            <div key={k} className={'tweak-swatch' + (tweaks.accent===k?' on':'')} style={{background: v.accent}} onClick={() => upd('accent', k)}/>
+          ))}
+        </div>
+      </div>
+
+      <div className="tweak-row">
+        <label>Yoğunluk</label>
+        <div className="tweak-seg">
+          {['balanced','compact'].map(v => <button key={v} className={tweaks.density===v?'on':''} onClick={() => upd('density', v)}>{v==='balanced'?'Dengeli':'Kompakt'}</button>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [route, setRoute] = useState(() => {
+    try { return localStorage.getItem('pmo.route') || 'dashboard'; } catch { return 'dashboard'; }
+  });
+  const [currentProject, setCurrentProject] = useState(() => {
+    try { const id = localStorage.getItem('pmo.project'); return id ? window.PMO_DATA.projects.find(p => p.id === id) : null; } catch { return null; }
+  });
+  const [currentDoc, setCurrentDoc] = useState(null);
+  const [tweaks, setTweaks] = useState(window.TWEAKS);
+  const [editMode, setEditMode] = useState(false);
+
+  useEffect(() => { applyTweaks(tweaks); }, [tweaks]);
+  useEffect(() => { try { localStorage.setItem('pmo.route', route); } catch {} }, [route]);
+  useEffect(() => { try { if (currentProject) localStorage.setItem('pmo.project', currentProject.id); else localStorage.removeItem('pmo.project'); } catch {} }, [currentProject]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.data?.type === '__activate_edit_mode') setEditMode(true);
+      if (e.data?.type === '__deactivate_edit_mode') setEditMode(false);
+    };
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  const onNav = (k) => {
+    setRoute(k);
+    setCurrentProject(null);
+    setCurrentDoc(null);
+  };
+
+  let content;
+  let crumbs = ['Nuevo PMO'];
+  if (currentDoc && currentProject) {
+    crumbs = ['Nuevo PMO', 'Projeler', currentProject.name, currentDoc.shortTitle];
+    content = <DocumentPage doc={currentDoc} project={currentProject} onBack={() => setCurrentDoc(null)}/>;
+  } else if (currentProject) {
+    crumbs = ['Nuevo PMO', 'Projeler', currentProject.name];
+    content = <ProjectDetail project={currentProject} onBack={() => setCurrentProject(null)} onOpenDoc={setCurrentDoc}/>;
+  } else {
+    switch (route) {
+      case 'dashboard': crumbs = ['Nuevo PMO', 'Panel']; content = <Dashboard/>; break;
+      case 'customers': crumbs = ['Nuevo PMO', 'Müşteriler']; content = <CustomersPage/>; break;
+      case 'projects': crumbs = ['Nuevo PMO', 'Projeler']; content = <ProjectsPage onOpenProject={setCurrentProject}/>; break;
+      case 'documents': crumbs = ['Nuevo PMO', 'Dokümanlar']; content = <DocumentsIndexPage onOpenDoc={(p, d) => { setCurrentProject(p); setCurrentDoc(d); }}/>; break;
+      case 'comments': crumbs = ['Nuevo PMO', 'Yorumlar']; content = <CommentsIndexPage/>; break;
+      case 'inbox': crumbs = ['Nuevo PMO', 'Gelen Kutusu']; content = <InboxPage/>; break;
+      case 'analytics': crumbs = ['Nuevo PMO', 'Analitik']; content = <AnalyticsIndexPage/>; break;
+      default: content = <Dashboard/>;
+    }
+  }
+
+  return (
+    <div className="app">
+      <Sidebar route={route} onNav={onNav} counts={{ inbox: 4, customers: 12, projects: 9, comments: 58 }}/>
+      <div className="main">
+        <Topbar crumbs={crumbs}/>
+        {content}
+      </div>
+      <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} open={editMode}/>
+    </div>
+  );
+}
+
+// Basit ek sayfalar — tek dosyada tutuyorum
+const DocumentsIndexPage = ({ onOpenDoc }) => {
+  const D = window.PMO_DATA;
+  const I = window.Icons;
+  const rows = [];
+  D.projects.slice(0, 6).forEach(p => {
+    const list = D.documentsByProject[p.id] || D.documentsByProject.p1;
+    list.forEach(d => rows.push({ p, d }));
+  });
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <span className="eyebrow">Tüm dokümanlar · {rows.length} belge</span>
+          <h1 className="page-title">Dokümanlar</h1>
+          <p className="page-sub">Tüm projelerdeki aktif dokümanlar. Müşteri onayı bekleyenleri, yorumları olanları ve son düzenlenenleri buradan takip edin.</p>
+        </div>
+        <button className="btn btn-primary"><I.Plus size={14}/> Yeni Doküman</button>
+      </div>
+      <div className="card">
+        <table className="tbl">
+          <thead><tr>
+            <th style={{paddingLeft: 20}}>Başlık</th><th>Proje</th><th>Tür</th><th>Güncel</th><th>Müşteri Onayı</th><th>Açık Yorum</th><th>Son Düzenleme</th>
+          </tr></thead>
+          <tbody>
+            {rows.slice(0, 14).map(({p, d}, i) => (
+              <tr key={i} style={{cursor: 'pointer'}} onClick={() => onOpenDoc(p, d)}>
+                <td style={{paddingLeft: 20}}>
+                  <div className="row" style={{gap: 10}}>
+                    <I.File size={14} style={{color: 'var(--ink-subtle)'}}/>
+                    <span style={{fontWeight: 500}}>{d.shortTitle}</span>
+                  </div>
+                </td>
+                <td className="muted">{p.name}</td>
+                <td><span className="pill pill-neutral">{d.type}</span></td>
+                <td><span className="tag tag-accent">{d.currentVersion}</span></td>
+                <td>{d.approvedByCustomer ? <span className="pill pill-ok"><I.Check size={10}/> {d.approvedByCustomer}</span> : <span className="pill pill-neutral">Bekliyor</span>}</td>
+                <td>{d.openComments > 0 ? <span className="mono" style={{color: 'var(--accent)', fontWeight: 600}}>{d.openComments}</span> : <span className="subtle">—</span>}</td>
+                <td className="subtle mono" style={{fontSize: 11.5}}>{d.lastEdited}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const CommentsIndexPage = () => {
+  const I = window.Icons;
+  const list = [
+    { id: 1, project: 'Espressolab B2B Portal', doc: 'Analiz Dokümanı', block: '§3.1 Teklif Modülü', author: 'Burak Aydemir', company: 'Espressolab', avatar: 'BA', color: '#6b7a5a', body: 'Oranların formatında son kısım 4 haneli olmalıdır.', tm: '17:09 bugün', status: 'open' },
+    { id: 2, project: 'Akbank Kredi Başvuru', doc: 'Kapsam', block: '§2.4 KVKK', author: 'Mehmet Sarı', company: 'Akbank', avatar: 'MS', color: '#4a5b6e', body: 'Açık rıza metni şablonu eklenmeli, mevcut metin yetersiz.', tm: '14:22 bugün', status: 'open' },
+    { id: 3, project: 'Yapı Kredi Onboarding', doc: 'Test Planı', block: '§1.2', author: 'Ece Demir', company: 'Yapı Kredi', avatar: 'ED', color: '#935d4c', body: 'Video-KYC test senaryolarında ışık koşulları da dahil edilmeli.', tm: '11:40 bugün', status: 'open' },
+    { id: 4, project: 'Pegasus Kargo', doc: 'Teknik Mimari', block: '§4.1', author: 'Kaan Aksoy', company: 'Pegasus', avatar: 'KA', color: '#7a5a8a', body: 'WMS entegrasyonu için mevcut API dokümantasyonu paylaşıldı mı?', tm: 'Dün', status: 'open' },
+    { id: 5, project: 'Migros Mobil POS', doc: 'Analiz Dokümanı', block: '§2.3', author: 'Deniz Yıldız', company: 'Migros Ticaret', avatar: 'DY', color: '#8a6d3b', body: 'SAP POSDM modülü ile eşleştirme tablosu lazım.', tm: 'Dün', status: 'open' },
+    { id: 6, project: 'Logo Migrasyon', doc: 'Kapsam', block: '§1', author: 'Ali Çetin', company: 'Logo Yazılım', avatar: 'AÇ', color: '#6b7a5a', body: 'İlk çeyrek kapsamı netleşti, onay veriyorum.', tm: '18 Nisan', status: 'resolved' },
+  ];
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <span className="eyebrow">Tüm projeler · 58 açık</span>
+          <h1 className="page-title">Yorumlar</h1>
+          <p className="page-sub">Müşterilerin tüm dokümanlara bıraktığı yorumlar. Çözülmemişlere öncelik verin.</p>
+        </div>
+        <div className="tweak-seg" style={{height: 32}}>
+          <button className="on">Açık (58)</button>
+          <button>Çözüldü (214)</button>
+          <button>Tümü</button>
+        </div>
+      </div>
+      <div className="card">
+        {list.map((c, i) => (
+          <div key={c.id} style={{padding: '16px 20px', borderBottom: i < list.length - 1 ? '1px solid var(--border)' : 'none', opacity: c.status === 'resolved' ? 0.55 : 1, cursor: 'pointer'}}>
+            <div className="row" style={{marginBottom: 8, gap: 8}}>
+              <span className="serif" style={{fontSize: 15, fontWeight: 500}}>{c.project}</span>
+              <span className="subtle">·</span>
+              <span className="muted" style={{fontSize: 13}}>{c.doc}</span>
+              <span className="tag tag-accent" style={{marginLeft: 4}}>{c.block}</span>
+              {c.status === 'resolved' && <span className="pill pill-ok" style={{marginLeft: 'auto'}}><I.Check size={10}/> Çözüldü</span>}
+              <span className="subtle mono" style={{fontSize: 11, marginLeft: c.status !== 'resolved' ? 'auto' : 0}}>{c.tm}</span>
+            </div>
+            <div className="row" style={{gap: 10}}>
+              <div className="av av-sm" style={{background: c.color}}>{c.avatar}</div>
+              <div className="grow">
+                <div style={{fontSize: 13}}><strong>{c.author}</strong> <span className="subtle">· {c.company}</span></div>
+                <div style={{fontSize: 13.5, color: 'var(--ink-muted)', marginTop: 2, lineHeight: 1.5}}>{c.body}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const InboxPage = () => {
+  const I = window.Icons;
+  const items = [
+    { tm: '18 dk', type: 'comment', title: 'Burak Aydemir sizi bahsetti', sub: 'Espressolab B2B · Analiz Dokümanı §3.1', body: '@Zilan — oranların format kısmına tekrar bakabilir misin?', unread: true },
+    { tm: '1 sa', type: 'approval', title: 'Kapsam Dokümanı onay bekliyor', sub: 'Akbank Kredi Başvuru · v2.0', body: 'Mehmet Sarı tarafından inceleme için gönderildi.', unread: true },
+    { tm: '3 sa', type: 'mention', title: 'Ece Demir yorumu çözdü', sub: 'Yapı Kredi Onboarding · Test Planı §2.1', body: '"Uygun, teşekkürler." — yorum kapatıldı.', unread: true },
+    { tm: '5 sa', type: 'invite', title: 'Davet kabul edildi', sub: 'Turkcell · dijital@turkcell.com.tr', body: 'Kullanıcı platforma katıldı ve rolü Contributor olarak atandı.', unread: true },
+    { tm: 'Dün', type: 'comment', title: 'Kaan Aksoy 3 yeni yorum bıraktı', sub: 'Pegasus Kargo · Teknik Mimari', body: 'WMS entegrasyonu ve ölçeklendirme üzerine notlar.', unread: false },
+    { tm: 'Dün', type: 'system', title: 'Haftalık rapor hazır', sub: 'Bu hafta 17 doküman düzenlendi, 22 yorum çözüldü.', body: '', unread: false },
+  ];
+  const iconFor = (t) => {
+    if (t === 'comment') return <I.Comment size={14}/>;
+    if (t === 'approval') return <I.CheckCircle size={14}/>;
+    if (t === 'mention') return <I.At size={14}/>;
+    if (t === 'invite') return <I.Send size={14}/>;
+    return <I.Activity size={14}/>;
+  };
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <span className="eyebrow">4 okunmamış</span>
+          <h1 className="page-title">Gelen Kutusu</h1>
+          <p className="page-sub">Bahsetmeler, onay talepleri ve sistem bildirimleri.</p>
+        </div>
+        <div className="row">
+          <button className="btn btn-secondary btn-sm">Tümünü okundu işaretle</button>
+          <button className="btn btn-ghost btn-sm"><I.Settings size={12}/></button>
+        </div>
+      </div>
+      <div className="card">
+        {items.map((it, i) => (
+          <div key={i} style={{padding: '14px 20px', borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none', display: 'grid', gridTemplateColumns: '32px 1fr auto', gap: 14, cursor: 'pointer', background: it.unread ? 'var(--surface)' : 'transparent'}}>
+            <div style={{width: 28, height: 28, borderRadius: 6, background: 'var(--surface-muted)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-muted)'}}>{iconFor(it.type)}</div>
+            <div>
+              <div className="row" style={{gap: 8, marginBottom: 2}}>
+                {it.unread && <span style={{width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)'}}/>}
+                <span style={{fontWeight: 500}}>{it.title}</span>
+              </div>
+              <div className="subtle" style={{fontSize: 12, marginBottom: 4}}>{it.sub}</div>
+              {it.body && <div className="muted" style={{fontSize: 13, lineHeight: 1.5}}>{it.body}</div>}
+            </div>
+            <span className="subtle mono" style={{fontSize: 11, alignSelf: 'start'}}>{it.tm}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const AnalyticsIndexPage = () => {
+  const I = window.Icons;
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <span className="eyebrow">Portföy Analitiği · Son 30 gün</span>
+          <h1 className="page-title">Analitik</h1>
+          <p className="page-sub">Doküman etkileşimi, müşteri katılımı ve yorum döngü süreleri.</p>
+        </div>
+        <button className="btn btn-secondary btn-sm"><I.Calendar size={12}/> Son 30 gün</button>
+      </div>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20}}>
+        {[
+          { l: 'Toplam Görüntüleme', v: '1,284', d: '+12% önceki 30 güne göre' },
+          { l: 'Ortalama Okuma', v: '8.2 dk', d: 'Doküman başına' },
+          { l: 'Yorum → Çözüm', v: '2.4 gün', d: 'Medyan süre · %18↓' },
+          { l: 'Onay Döngüsü', v: '5.8 gün', d: 'v1.0 → v1.x onayı' },
+        ].map(k => (
+          <div className="kpi" key={k.l}>
+            <div className="kpi-label">{k.l}</div>
+            <div className="kpi-value">{k.v}</div>
+            <div className="subtle" style={{fontSize: 11.5}}>{k.d}</div>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <div className="card-head"><h2 className="card-title">Müşteri Etkileşimi</h2></div>
+        <table className="tbl">
+          <thead><tr><th style={{paddingLeft: 20}}>Müşteri</th><th>Görüntüleme</th><th>Ort. Süre</th><th>Açılan Yorum</th><th>Onayladığı Sürüm</th><th>Son Aktivite</th></tr></thead>
+          <tbody>
+            {window.PMO_DATA.customers.slice(0, 8).map(c => (
+              <tr key={c.id}>
+                <td style={{paddingLeft: 20}}>
+                  <div className="row" style={{gap: 10}}>
+                    <div className="av av-sm" style={{background: 'var(--surface-muted)', color: 'var(--ink)', border: '1px solid var(--border)', fontFamily: 'var(--font-display)', fontSize: 11}}>{c.logo}</div>
+                    <span style={{fontWeight: 500}}>{c.name}</span>
+                  </div>
+                </td>
+                <td className="num mono">{Math.floor(Math.random()*200 + 40)}</td>
+                <td className="num mono">{(Math.random()*15 + 3).toFixed(1)} dk</td>
+                <td className="num mono">{c.openComments}</td>
+                <td><span className="tag">v{Math.floor(Math.random()*3)}.{Math.floor(Math.random()*5)}</span></td>
+                <td className="subtle mono" style={{fontSize: 11.5}}>{['2 sa', 'Dün', '3 gün', '1 hf'][Math.floor(Math.random()*4)]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

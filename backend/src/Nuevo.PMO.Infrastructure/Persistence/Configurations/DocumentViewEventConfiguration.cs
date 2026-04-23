@@ -11,7 +11,7 @@ public class DocumentViewEventConfiguration : IEntityTypeConfiguration<DocumentV
         b.ToTable("document_view_events");
         b.HasKey(x => x.Id);
 
-        b.HasIndex(x => new { x.DocumentId, x.DocumentVersionId });
+        b.HasIndex(x => x.DocumentId);
         b.HasIndex(x => x.SessionId).IsUnique();
         b.HasIndex(x => x.UserId);
 
@@ -19,11 +19,6 @@ public class DocumentViewEventConfiguration : IEntityTypeConfiguration<DocumentV
             .WithMany(d => d.ViewEvents)
             .HasForeignKey(x => x.DocumentId)
             .OnDelete(DeleteBehavior.Cascade);
-
-        b.HasOne(x => x.DocumentVersion)
-            .WithMany()
-            .HasForeignKey(x => x.DocumentVersionId)
-            .OnDelete(DeleteBehavior.Restrict);
 
         b.HasOne(x => x.User)
             .WithMany()

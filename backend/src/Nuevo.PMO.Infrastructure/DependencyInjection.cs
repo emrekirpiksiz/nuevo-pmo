@@ -26,6 +26,11 @@ public static class DependencyInjection
             {
                 npg.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
                 npg.MigrationsHistoryTable("__ef_migrations_history", "pmo");
+                // Büyük dokümanlar (100+ sayfa markdown / birkaç MB jsonb) için
+                // Npgsql'in default 30s timeout'unu 120s'e çek. Uygulama kodu
+                // kritik sorgularda projection kullanarak bu limiti aşmamalı;
+                // buradaki yüksek değer yalnız güvenlik ağıdır.
+                npg.CommandTimeout(120);
             });
         });
         services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
@@ -37,6 +42,7 @@ public static class DependencyInjection
         services.AddSingleton<IDocxExporter, DocxExporter>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
+        services.AddScoped<INotificationSender, NotificationSender>();
         services.AddScoped<IO365AuthService, O365AuthService>();
 
         return services;

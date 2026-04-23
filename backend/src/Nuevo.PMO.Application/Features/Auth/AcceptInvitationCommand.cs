@@ -52,20 +52,37 @@ public class AcceptInvitationHandler : IRequestHandler<AcceptInvitationCommand, 
             throw new DomainException("INVITATION_EXPIRED", "This invitation has expired.");
 
         var email = inv.Email;
-        var exists = await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email == email, ct);
-        if (exists) throw new DomainException("USER_EXISTS", "A user with this email already exists.");
+        var user = await _db.Users.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Email == email && !u.IsDeleted, ct);
 
-        var user = new User
+        if (user is not null)
         {
-            Email = email,
-            DisplayName = request.DisplayName.Trim(),
-            UserType = UserType.Customer,
-            CustomerId = inv.CustomerId,
-            PasswordHash = _hasher.Hash(request.Password),
-            IsActive = true,
-            LastLoginAt = DateTime.UtcNow
-        };
-        _db.Users.Add(user);
+            var isPending = user.UserType == UserType.Customer
+                            && user.PasswordHash is null
+                            && !user.IsActive;
+            if (!isPending)
+                throw new DomainException("USER_EXISTS", "A user with this email already exists.");
+
+            user.DisplayName = request.DisplayName.Trim();
+            user.CustomerId = inv.CustomerId;
+            user.PasswordHash = _hasher.Hash(request.Password);
+            user.IsActive = true;
+            user.LastLoginAt = DateTime.UtcNow;
+        }
+        else
+        {
+            user = new User
+            {
+                Email = email,
+                DisplayName = request.DisplayName.Trim(),
+                UserType = UserType.Customer,
+                CustomerId = inv.CustomerId,
+                PasswordHash = _hasher.Hash(request.Password),
+                IsActive = true,
+                LastLoginAt = DateTime.UtcNow
+            };
+            _db.Users.Add(user);
+        }
 
         inv.AcceptedAt = DateTime.UtcNow;
         inv.AcceptedUserId = user.Id;

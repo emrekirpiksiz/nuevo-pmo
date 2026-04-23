@@ -1,0 +1,56 @@
+---
+description: Nuevo PMO — proje genel bakış, mimari ve çalıştırma bilgileri
+alwaysApply: true
+---
+
+# Nuevo PMO — Proje Genel Bakış
+
+**Ne yapar:** Müşterilere yönelik proje yönetim ofisi uygulaması. Admin (Nuevo ekibi) ve Portal (müşteri) olmak üzere iki ayrı arayüz.
+
+## Tech Stack
+
+| Katman | Teknoloji |
+|--------|-----------|
+| Backend API | ASP.NET Core / .NET 10, MediatR, FluentValidation, JWT |
+| Veritabanı | PostgreSQL (Npgsql), EF Core — schema: `pmo` |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript 5 |
+| UI | Ant Design 5 |
+| State | TanStack React Query 5, Zustand |
+| Editor | TipTap (ProseMirror) |
+
+## Mimari
+
+```
+backend/src/
+  Nuevo.PMO.Domain/         # Entities, Enums — dış bağımlılık yok
+  Nuevo.PMO.Application/    # MediatR handlers, IAppDbContext, FluentValidation
+  Nuevo.PMO.Infrastructure/ # EF Core, PostgreSQL, JWT, DOCX, O365
+  Nuevo.PMO.Api/            # Controllers → IMediator, JWT auth policies
+```
+
+## Temel URL Şeması
+
+- `api/auth/*` — giriş, O365, davet
+- `api/admin/*` — **NuevoOnly** policy (Nuevo çalışanları)
+- `api/projects/*` — hem admin hem portal kullanıcıları
+- `api/documents/*` — doküman işlemleri
+
+## Geliştirme Portları
+
+- Backend: `http://localhost:7000`
+- Frontend: `http://localhost:7001` (`npm run dev`)
+
+## Auth Policies
+
+- **NuevoOnly** — sadece Nuevo tipi kullanıcılar
+- **CustomerOnly** — sadece müşteri kullanıcılar
+- **ProjectMember** — projeye üye olanlar
+
+## Frontend Route Yapısı
+
+```
+/admin/*      → Nuevo admin arayüzü
+/portal/*     → Müşteri portal arayüzü
+/login        → Müşteri girişi
+/admin/login  → Admin girişi
+```

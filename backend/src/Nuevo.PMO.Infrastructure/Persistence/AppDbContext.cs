@@ -26,9 +26,16 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<DocumentApproval> DocumentApprovals => Set<DocumentApproval>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<CommentReply> CommentReplies => Set<CommentReply>();
+    public DbSet<DocumentBlockChange> DocumentBlockChanges => Set<DocumentBlockChange>();
     public DbSet<DocumentViewEvent> DocumentViewEvents => Set<DocumentViewEvent>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<ProjectPlan> ProjectPlans => Set<ProjectPlan>();
+    public DbSet<PlanStep> PlanSteps => Set<PlanStep>();
+    public DbSet<PlanMilestone> PlanMilestones => Set<PlanMilestone>();
+    public DbSet<ProjectPlanSnapshot> ProjectPlanSnapshots => Set<ProjectPlanSnapshot>();
+    public DbSet<ProjectReport> ProjectReports => Set<ProjectReport>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

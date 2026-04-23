@@ -26,11 +26,11 @@ public class CommentsController : ControllerBase
         return Ok(await _mediator.Send(new GetCommentsQuery(documentId, statuses), ct));
     }
 
-    public record CreateCommentBody(Guid VersionId, string BlockId, string AnchorText, string Body);
+    public record CreateCommentBody(string BlockId, string AnchorText, string Body);
 
     [HttpPost("api/documents/{documentId:guid}/comments")]
     public async Task<ActionResult<CommentDto>> Create(Guid documentId, [FromBody] CreateCommentBody body, CancellationToken ct)
-        => Ok(await _mediator.Send(new CreateCommentCommand(documentId, body.VersionId, body.BlockId, body.AnchorText, body.Body), ct));
+        => Ok(await _mediator.Send(new CreateCommentCommand(documentId, body.BlockId, body.AnchorText, body.Body), ct));
 
     public record UpdateBody(string Body);
 
@@ -54,6 +54,7 @@ public class CommentsController : ControllerBase
     public async Task<ActionResult<CommentReplyDto>> Reply(Guid id, [FromBody] ReplyBody body, CancellationToken ct)
         => Ok(await _mediator.Send(new AddReplyCommand(id, body.Body), ct));
 
+    /// <summary>Yorumu manuel olarak "çözüldü" işaretler (sadece Nuevo).</summary>
     [HttpPatch("api/comments/{id:guid}/resolve")]
     [Authorize(Policy = "NuevoOnly")]
     public async Task<IActionResult> Resolve(Guid id, CancellationToken ct)
@@ -62,8 +63,11 @@ public class CommentsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Yorumu yeniden açar. Nuevo herhangi bir yorumu; müşteri yalnız
+    /// kendi yazdığı yorumu yeniden açabilir.
+    /// </summary>
     [HttpPatch("api/comments/{id:guid}/reopen")]
-    [Authorize(Policy = "NuevoOnly")]
     public async Task<IActionResult> Reopen(Guid id, CancellationToken ct)
     {
         await _mediator.Send(new ReopenCommentCommand(id), ct);

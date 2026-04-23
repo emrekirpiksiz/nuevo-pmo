@@ -50,7 +50,7 @@ function AcceptInviteInner() {
               Hesabınızı Oluşturun
             </Typography.Title>
             <Typography.Text type="secondary">
-              Nuevo PMO davetiyenizi tamamlayın
+              Nuevo Project Management Portal davetiyenizi tamamlayın
             </Typography.Text>
           </div>
           {!token && <Alert type="error" showIcon message="Token bulunamadı. Lütfen e-postadaki bağlantıyı kullanın." />}

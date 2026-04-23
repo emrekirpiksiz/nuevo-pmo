@@ -1,0 +1,68 @@
+---
+description: Frontend Next.js/React konvansiyonları — App Router, Ant Design, apis.ts
+globs: frontend/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend Konvansiyonları
+
+## Dizin Yapısı
+
+```
+src/app/admin/*       → Nuevo admin sayfaları (Next.js App Router)
+src/app/portal/*      → Müşteri portal sayfaları
+src/components/       → Genel UI bileşenleri (AppShell, Sidebar, Topbar, PageHeader…)
+src/features/<name>/  → Özelliğe ait bileşenler, hook'lar, mantık
+src/lib/apis.ts       → Tüm API çağrıları buradan yapılır
+src/lib/api.ts        → Axios instance (baseURL, JWT header, 401 yönlendirme)
+src/providers/        → QueryClientProvider, Ant Design ConfigProvider vb.
+```
+
+## API Çağrıları
+
+**Tüm API çağrıları `src/lib/apis.ts` üzerinden yapılır.** Doğrudan axios çağrısı yazma.  
+Yeni endpoint eklenince `apis.ts`'e ilgili Api modülüne metod ekle.
+
+```ts
+// ✅ Doğru
+import { ProjectsApi } from '@/lib/apis';
+const data = await ProjectsApi.getById(id);
+
+// ❌ Yanlış
+import api from '@/lib/api';
+const data = await api.get(`/projects/${id}`);
+```
+
+## Veri Yönetimi
+
+- **Sunucu verisi:** TanStack React Query (`useQuery`, `useMutation`)
+- **Client state:** Zustand (yalnızca gerçek UI state için)
+- Query key'leri string array olarak tut: `['projects', id]`
+
+## UI Bileşenleri
+
+- Ant Design 5 bileşenlerini kullan (`Table`, `Form`, `Modal`, `Drawer`…)
+- Özel ortak bileşenler `src/components/`'da: `PageHeader`, `SegTabs`, `StatusPill`, `Kpi`, `StubPage`, `ComingSoon`
+- `StubPage` → henüz yapılmamış sayfalar için placeholder
+
+## Sayfa Şablonu
+
+```tsx
+export default function MyPage() {
+  return (
+    <AppShell>
+      <PageHeader title="Başlık" />
+      {/* içerik */}
+    </AppShell>
+  );
+}
+```
+
+## Editor (TipTap)
+
+TipTap extensions `src/features/editor/`'da. Markdown dönüşümleri `markdownHelpers.ts` üzerinden. Block ID'leri `BlockIdExtension.ts` yönetiyor — comment anchor için kritik.
+
+## Admin vs Portal Ayrımı
+
+- Admin sayfalarında `UserType === 'Nuevo'` kontrolü yapılır
+- Portal sayfaları müşteri kullanıcıları içindir, hassas admin verisi gösterilmez

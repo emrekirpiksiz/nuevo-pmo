@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nuevo.PMO.Application.Features.Analytics;
+using Nuevo.PMO.Application.Features.AuditLogs;
 using Nuevo.PMO.Application.Features.Documents;
 using Nuevo.PMO.Domain.Enums;
 
@@ -28,8 +29,8 @@ public class DocumentsController : ControllerBase
     [Authorize(Policy = "NuevoOnly")]
     public async Task<ActionResult<DocumentDto>> Create(Guid projectId, [FromBody] CreateDocumentBody body, CancellationToken ct)
     {
-        var result = await _mediator.Send(new CreateDocumentCommand(projectId, body.Title, body.Type), ct);
-        return CreatedAtAction(nameof(Get), new { id = result.Id }, result);
+        var r = await _mediator.Send(new CreateDocumentCommand(projectId, body.Title, body.Type), ct);
+        return CreatedAtAction(nameof(Get), new { id = r.Id }, r);
     }
 
     public record UpdateDocumentBody(string Title, DocumentType Type);
@@ -50,49 +51,60 @@ public class DocumentsController : ControllerBase
         return NoContent();
     }
 
-    [HttpGet("api/documents/{id:guid}/versions")]
-    public async Task<ActionResult<List<DocumentVersionDto>>> Versions(Guid id, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetDocumentVersionsQuery(id), ct));
+    // ---------- Content (admin=draft, customer=published) ----------
+    [HttpGet("api/documents/{id:guid}/content")]
+    public async Task<ActionResult<DocumentContentDto>> Content(Guid id, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetDocumentContentQuery(id), ct));
 
-    [HttpGet("api/documents/{id:guid}/versions/{versionId:guid}")]
-    public async Task<ActionResult<DocumentVersionContentDto>> Version(Guid id, Guid versionId, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetDocumentVersionContentQuery(id, versionId), ct));
+    public record SaveBody(string ContentJson, string ContentMarkdown);
 
-    public record SaveContentBody(string ContentJson, string ContentMarkdown);
-
-    [HttpPut("api/documents/{id:guid}/content")]
+    /// <summary>Admin taslağını günceller.</summary>
+    [HttpPost("api/documents/{id:guid}/save")]
     [Authorize(Policy = "NuevoOnly")]
-    public async Task<ActionResult<DocumentVersionDto>> SaveContent(Guid id, [FromBody] SaveContentBody body, CancellationToken ct)
-        => Ok(await _mediator.Send(new SaveDocumentContentCommand(id, body.ContentJson, body.ContentMarkdown), ct));
+    public async Task<ActionResult<DocumentDto>> Save(Guid id, [FromBody] SaveBody body, CancellationToken ct)
+        => Ok(await _mediator.Send(new SaveDocumentCommand(id, body.ContentJson, body.ContentMarkdown), ct));
 
-    [HttpPost("api/documents/{id:guid}/versions/{versionId:guid}/publish")]
+    public record PublishBody(string? Label);
+
+    /// <summary>Taslağı yeni bir müşteri sürümü olarak yayınlar.</summary>
+    [HttpPost("api/documents/{id:guid}/publish")]
     [Authorize(Policy = "NuevoOnly")]
-    public async Task<IActionResult> Publish(Guid id, Guid versionId, CancellationToken ct)
-    {
-        await _mediator.Send(new PublishDocumentCommand(id, versionId), ct);
-        return NoContent();
-    }
+    public async Task<ActionResult<DocumentDto>> Publish(Guid id, [FromBody] PublishBody? body, CancellationToken ct)
+        => Ok(await _mediator.Send(new PublishCustomerVersionCommand(id, body?.Label), ct));
 
+    // ---------- Changes (değişiklikler paneli) ----------
+    [HttpGet("api/documents/{id:guid}/changes")]
+    public async Task<ActionResult<List<DocumentBlockChangeDto>>> Changes(Guid id, [FromQuery] Guid? versionId, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetBlockChangesQuery(id, versionId), ct));
+
+    // ---------- Approval ----------
     public record ApproveBody(string? Note);
 
-    [HttpPost("api/documents/{id:guid}/versions/{versionId:guid}/approve")]
+    [HttpPost("api/documents/{id:guid}/approve")]
     [Authorize(Policy = "CustomerOnly")]
-    public async Task<ActionResult<DocumentApprovalDto>> Approve(Guid id, Guid versionId, [FromBody] ApproveBody body, CancellationToken ct)
-        => Ok(await _mediator.Send(new ApproveDocumentVersionCommand(id, versionId, body.Note), ct));
+    public async Task<ActionResult<DocumentApprovalDto>> Approve(Guid id, [FromBody] ApproveBody body, CancellationToken ct)
+        => Ok(await _mediator.Send(new ApproveDocumentCommand(id, body.Note), ct));
 
     [HttpGet("api/documents/{id:guid}/approvals")]
     public async Task<ActionResult<List<DocumentApprovalDto>>> Approvals(Guid id, CancellationToken ct)
         => Ok(await _mediator.Send(new GetApprovalsQuery(id), ct));
 
+    // ---------- Export ----------
     [HttpGet("api/documents/{id:guid}/export.docx")]
-    public async Task<IActionResult> ExportDocx(Guid id, [FromQuery] Guid? versionId, CancellationToken ct)
+    public async Task<IActionResult> ExportDocx(Guid id, CancellationToken ct = default)
     {
-        var r = await _mediator.Send(new ExportDocumentDocxQuery(id, versionId), ct);
+        var r = await _mediator.Send(new ExportDocumentDocxQuery(id), ct);
         return File(r.Content, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", r.FileName);
     }
 
+    // ---------- Analytics & Audit ----------
     [HttpGet("api/admin/documents/{id:guid}/analytics")]
     [Authorize(Policy = "NuevoOnly")]
     public async Task<ActionResult<AnalyticsReportDto>> Analytics(Guid id, CancellationToken ct)
         => Ok(await _mediator.Send(new GetDocumentAnalyticsQuery(id), ct));
+
+    [HttpGet("api/admin/documents/{id:guid}/audit-logs")]
+    [Authorize(Policy = "NuevoOnly")]
+    public async Task<ActionResult<List<AuditLogDto>>> AuditLogs(Guid id, [FromQuery] int take = 200, CancellationToken ct = default)
+        => Ok(await _mediator.Send(new GetDocumentAuditLogsQuery(id, take), ct));
 }

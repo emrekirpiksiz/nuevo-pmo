@@ -2,14 +2,43 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Card, Col, Dropdown, Row, Select, Space, Tag, Typography, App as AntdApp, Tabs, List } from "antd";
-import { CloudDownloadOutlined, SaveOutlined, SendOutlined, BarChartOutlined } from "@ant-design/icons";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { DocumentEditor, DocumentEditorHandle } from "@/features/editor/DocumentEditor";
+import {
+  App as AntdApp,
+  Button,
+  Input,
+  Modal,
+  Tooltip,
+} from "antd";
+import {
+  ArrowLeftOutlined,
+  BarChartOutlined,
+  CheckOutlined,
+  CloudDownloadOutlined,
+  CloudUploadOutlined,
+  FileTextOutlined,
+  HistoryOutlined,
+  MessageOutlined,
+  SaveOutlined,
+  StarFilled,
+} from "@ant-design/icons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DocumentEditor,
+  DocumentEditorHandle,
+} from "@/features/editor/DocumentEditor";
 import { CommentsPanel } from "@/features/comments/CommentsPanel";
-import { Comment, DocumentsApi, DocumentVersionDto } from "@/lib/apis";
+import { CommentDrawer } from "@/features/comments/CommentDrawer";
+import { useCommentNavigation } from "@/features/comments/useCommentNavigation";
+import { Comment, CommentsApi, DocumentsApi } from "@/lib/apis";
 import { API_BASE_URL, extractErrorMessage } from "@/lib/api";
 import { AnalyticsView } from "@/features/documents/AnalyticsView";
+import { ChangesView } from "@/features/documents/ChangesView";
+import { CommentNavigator } from "@/features/documents/CommentNavigator";
+import { computeEffectiveBlockIdMap } from "@/features/editor/effectiveBlockId";
+import { SegTabs } from "@/components/SegTabs";
+
+type ViewMode = "editor" | "comments" | "changes" | "analytics";
+const EMPTY_COMMENTS: Comment[] = [];
 
 export default function AdminDocumentEditorPage() {
   const params = useParams<{ id: string; docId: string }>();
@@ -17,72 +46,192 @@ export default function AdminDocumentEditorPage() {
   const { message, modal } = AntdApp.useApp();
   const qc = useQueryClient();
   const docId = params.docId;
+  const projectId = params.id;
 
   const editorRef = useRef<DocumentEditorHandle>(null);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
-  const [selectedBlock, setSelectedBlock] = useState<{ blockId: string; text: string } | null>(null);
-  const [commentBlocks, setCommentBlocks] = useState<Set<string>>(new Set());
+  const [mode, setMode] = useState<ViewMode>("editor");
+  const [selectedBlock, setSelectedBlock] = useState<{
+    blockId: string;
+    text: string;
+  } | null>(null);
+  const [newCommentDrawer, setNewCommentDrawer] = useState<null | {
+    blockId: string;
+    anchorText: string;
+  }>(null);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishLabel, setPublishLabel] = useState("");
 
-  const { data: document } = useQuery({ queryKey: ["document", docId], queryFn: () => DocumentsApi.get(docId) });
-  const { data: versions = [] } = useQuery({ queryKey: ["document-versions", docId], queryFn: () => DocumentsApi.versions(docId) });
-
-  const activeVersionId = selectedVersionId ?? document?.currentDraftVersionId ?? document?.publishedVersionId ?? null;
-  const activeVersion = useMemo(() => versions.find((v) => v.id === activeVersionId) ?? null, [versions, activeVersionId]);
-  const isEditing = !!activeVersion && !activeVersion.isPublished && activeVersion.id === document?.currentDraftVersionId;
-
-  const { data: versionContent, refetch: refetchContent } = useQuery({
-    queryKey: ["document-version-content", docId, activeVersionId],
-    queryFn: () => (activeVersionId ? DocumentsApi.version(docId, activeVersionId) : Promise.resolve(null)),
-    enabled: !!activeVersionId,
+  const { data: document } = useQuery({
+    queryKey: ["document", docId],
+    queryFn: () => DocumentsApi.get(docId),
   });
 
+  const { data: allComments = EMPTY_COMMENTS } = useQuery({
+    queryKey: ["comments", docId],
+    queryFn: () => CommentsApi.list(docId),
+  });
+
+  const { data: content } = useQuery({
+    queryKey: ["document-content", docId],
+    queryFn: () => DocumentsApi.content(docId),
+  });
+
+  // Canlı blockTextMap — DOM'daki güncel blockId'leri yakalayabilmek için.
+  const [blockTextMap, setBlockTextMap] = useState<Map<string, string>>(new Map());
+  const refreshBlockTextMap = useCallback(() => {
+    const m = editorRef.current?.extractLiveBlockTextMap();
+    if (m && m.size > 0) setBlockTextMap(m);
+  }, []);
+
+  const effectiveBlockIdMap = useMemo(
+    () => computeEffectiveBlockIdMap(allComments, blockTextMap),
+    [allComments, blockTextMap]
+  );
+
+  const ensureEditorMounted = useCallback(() => {
+    setMode((m) => (m === "editor" ? m : "editor"));
+  }, []);
+
+  const onMissingBlock = useCallback(
+    () =>
+      message.warning(
+        "Bu yoruma ait blok güncel içerikte bulunamadı (blok silinmiş olabilir). Yorum paneli açıldı.",
+        3
+      ),
+    [message]
+  );
+
+  const nav = useCommentNavigation({
+    docId,
+    allComments,
+    effectiveBlockIdMap,
+    blockTextMap,
+    editorRef,
+    ensureEditorMounted,
+    onMissingBlock,
+  });
+
+  const { consumePendingFocus } = nav;
+  const lastLoadedContentRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (versionContent) {
-      try {
-        const obj = JSON.parse(versionContent.contentJson);
-        editorRef.current?.setContent(obj);
-      } catch {
-        // invalid json
+    if (!content || !editorRef.current) return;
+    const sig = `${content.documentId}|${(content.contentJson ?? "").length}`;
+    if (lastLoadedContentRef.current !== sig) {
+      lastLoadedContentRef.current = sig;
+      const md = content.contentMarkdown ?? "";
+      const mdHasTable = /^\s*\|[^\n]*\|\s*$/m.test(md);
+      const jsonHasTable = content.contentJson?.includes('"type":"table"');
+      if (mdHasTable && !jsonHasTable) {
+        editorRef.current.setContentFromMarkdown(md);
+      } else {
+        try {
+          const obj = JSON.parse(content.contentJson);
+          editorRef.current.setContent(obj, md);
+        } catch {
+          editorRef.current.setContentFromMarkdown(md);
+        }
       }
+      requestAnimationFrame(() => refreshBlockTextMap());
+      setTimeout(() => refreshBlockTextMap(), 250);
     }
-  }, [versionContent]);
+    if (mode === "editor") consumePendingFocus();
+  }, [content, mode, consumePendingFocus, refreshBlockTextMap]);
+
+  const commentBadges = useMemo(() => {
+    const map = new Map<string, number>();
+    allComments
+      .filter((c) => c.status === "Open")
+      .forEach((c) => {
+        const eff = effectiveBlockIdMap.get(c.blockId);
+        if (!eff) return;
+        map.set(eff, (map.get(eff) ?? 0) + 1);
+      });
+    return Array.from(map.entries()).map(([blockId, count]) => ({ blockId, count }));
+  }, [allComments, effectiveBlockIdMap]);
+
+  const highlightedBlockIds = useMemo(
+    () =>
+      new Set(
+        allComments
+          .filter((c) => c.status === "Open")
+          .map((c) => effectiveBlockIdMap.get(c.blockId))
+          .filter((x): x is string => !!x)
+      ),
+    [allComments, effectiveBlockIdMap]
+  );
+
+  const handleBadgeClick = useCallback(
+    (effectiveBlockId: string) => {
+      const match = allComments.find(
+        (c) => (effectiveBlockIdMap.get(c.blockId) ?? c.blockId) === effectiveBlockId
+      );
+      if (match) nav.goTo(match);
+    },
+    [allComments, effectiveBlockIdMap, nav]
+  );
+
+  const commentingAllowed = !!document?.customerVersionId;
+
+  const handleCommentRequest = useCallback(
+    (payload: { blockId: string; anchorText: string }) => {
+      if (!commentingAllowed) {
+        message.info(
+          "Yorumlar yalnız yayınlanmış müşteri sürümü üzerinde yapılır. Önce 'Müşteri Sürümü Yayınla'."
+        );
+        return;
+      }
+      setNewCommentDrawer(payload);
+    },
+    [commentingAllowed, message]
+  );
 
   const saveMut = useMutation({
     mutationFn: async () => {
       const json = editorRef.current?.getContentJson() ?? "{}";
       const md = editorRef.current?.getContentMarkdown() ?? "";
-      const v = await DocumentsApi.saveContent(docId, json, md);
-      return v;
+      return DocumentsApi.save(docId, json, md);
     },
-    onSuccess: (v: DocumentVersionDto) => {
-      message.success(`V${v.versionNumber} kaydedildi.`);
+    onSuccess: () => {
+      message.success("Taslak kaydedildi.");
       qc.invalidateQueries({ queryKey: ["document", docId] });
-      qc.invalidateQueries({ queryKey: ["document-versions", docId] });
-      qc.invalidateQueries({ queryKey: ["comments", docId] });
-      setSelectedVersionId(v.id);
+      qc.invalidateQueries({ queryKey: ["document-content", docId] });
     },
     onError: (e) => message.error(extractErrorMessage(e)),
   });
 
   const publishMut = useMutation({
-    mutationFn: (vid: string) => DocumentsApi.publish(docId, vid).then(() => vid),
-    onSuccess: () => {
-      message.success("Yayınlandı.");
+    mutationFn: async () => {
+      // Publish öncesinde son taslağı kaydet.
+      const json = editorRef.current?.getContentJson() ?? "{}";
+      const md = editorRef.current?.getContentMarkdown() ?? "";
+      await DocumentsApi.save(docId, json, md);
+      return DocumentsApi.publish(docId, publishLabel.trim() || undefined);
+    },
+    onSuccess: (d) => {
+      const major = d.customerMajor ?? d.currentMajor;
+      message.success(`v${major}.0 olarak yayınlandı.`);
+      setPublishOpen(false);
+      setPublishLabel("");
       qc.invalidateQueries({ queryKey: ["document", docId] });
-      qc.invalidateQueries({ queryKey: ["document-versions", docId] });
+      qc.invalidateQueries({ queryKey: ["document-content", docId] });
+      qc.invalidateQueries({ queryKey: ["comments", docId] });
+      qc.invalidateQueries({ queryKey: ["document-changes", docId] });
     },
     onError: (e) => message.error(extractErrorMessage(e)),
   });
 
   const handleExport = () => {
     const token = localStorage.getItem("nuevo_pmo_token");
-    const url = `${API_BASE_URL}/api/documents/${docId}/export.docx${activeVersionId ? `?versionId=${activeVersionId}` : ""}`;
+    const url = `${API_BASE_URL}/api/documents/${docId}/export.docx`;
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then(async (r) => {
         if (!r.ok) throw new Error("Export failed");
         const blob = await r.blob();
         const cd = r.headers.get("content-disposition") ?? "";
-        const fname = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)?.[1] ?? `${document?.title ?? "document"}.docx`;
+        const fname =
+          /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)?.[1] ??
+          `${document?.title ?? "document"}.docx`;
         const href = URL.createObjectURL(blob);
         const a = window.document.createElement("a");
         a.href = href;
@@ -93,120 +242,303 @@ export default function AdminDocumentEditorPage() {
       .catch((e) => message.error(extractErrorMessage(e)));
   };
 
+  const openCount = allComments.filter((c) => c.status === "Open").length;
+  const hasDraft = document?.hasDraftChanges ?? false;
+
   return (
-    <Space direction="vertical" size="large" style={{ width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 16, flexWrap: "wrap" }}>
-        <div>
-          <Typography.Title level={3} style={{ margin: 0 }}>{document?.title}</Typography.Title>
-          <Space size="small">
-            <Typography.Text type="secondary">{document?.projectName}</Typography.Text>
-            {document?.publishedVersionNumber && <Tag color="green">Published V{document.publishedVersionNumber}</Tag>}
-            {document?.approvedVersionNumber && <Tag color="gold">Approved V{document.approvedVersionNumber}</Tag>}
-          </Space>
-        </div>
-        <Space wrap>
-          <Select
-            style={{ minWidth: 200 }}
-            value={activeVersionId ?? undefined}
-            onChange={(v) => setSelectedVersionId(v)}
-            options={versions.map((v) => ({
-              value: v.id,
-              label: `V${v.versionNumber}${v.isPublished ? " (Published)" : v.isDraft ? " (Draft)" : ""}${v.isApproved ? " ✓" : ""}`,
-            }))}
-          />
-          <Button icon={<SaveOutlined />} type="primary" onClick={() => saveMut.mutate()} loading={saveMut.isPending}>
-            Draft Kaydet
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 56px)" }}>
+      {/* Sticky sub-topbar — kompakt */}
+      <div
+        style={{
+          padding: "10px 32px 0",
+          borderBottom: "1px solid var(--border)",
+          background: "var(--canvas)",
+          position: "sticky",
+          top: 56,
+          zIndex: 10,
+          flexShrink: 0,
+        }}
+      >
+        <div className="row" style={{ marginBottom: 4, minHeight: 22 }}>
+          <Button
+            type="text"
+            size="small"
+            icon={<ArrowLeftOutlined />}
+            onClick={() => router.push(`/admin/projects/${projectId}`)}
+            style={{ marginLeft: -8, color: "var(--ink-muted)", height: 22, padding: "0 6px" }}
+          >
+            {document?.projectName ?? "Proje"}
           </Button>
-          {activeVersion && !activeVersion.isPublished && (
-            <Button
-              icon={<SendOutlined />}
-              onClick={() =>
-                modal.confirm({
-                  title: `V${activeVersion.versionNumber} yayınlansın mı?`,
-                  content: "Yayınlanan versiyonlar müşteri tarafından görünür olur.",
-                  onOk: () => publishMut.mutateAsync(activeVersion.id),
-                })
-              }
-            >
-              Publish
-            </Button>
+          <span className="subtle">/</span>
+          <span className="subtle" style={{ fontSize: 12 }}>
+            Dokümanlar
+          </span>
+          <div
+            className="row subtle ellipsis"
+            style={{
+              marginLeft: "auto",
+              fontSize: 11.5,
+              gap: 8,
+              flexShrink: 1,
+              minWidth: 0,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+            }}
+          >
+            {document?.draftUpdatedAt && (
+              <span>
+                Taslak: {new Date(document.draftUpdatedAt).toLocaleString("tr-TR")}
+              </span>
+            )}
+            {openCount > 0 && (
+              <>
+                <span>·</span>
+                <span>{openCount} açık yorum</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="row" style={{ gap: 10, marginBottom: 10, minWidth: 0 }}>
+          <h1
+            style={{
+              fontFamily: "var(--font-display)",
+              fontWeight: 400,
+              fontSize: 26,
+              margin: 0,
+              letterSpacing: "-0.2px",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              flex: 1,
+              minWidth: 0,
+              lineHeight: 1.15,
+            }}
+            title={document?.title ?? ""}
+          >
+            {document?.title ?? "—"}
+          </h1>
+          {document?.customerDisplay ? (
+            <span className="pill pill-accent" style={{ flexShrink: 0 }}>
+              <StarFilled style={{ fontSize: 10 }} /> Yayın: {document.customerDisplay}
+            </span>
+          ) : (
+            <span className="pill pill-neutral" style={{ flexShrink: 0 }}>
+              Henüz yayınlanmadı
+            </span>
           )}
-          <Button icon={<CloudDownloadOutlined />} onClick={handleExport}>Word Export</Button>
-        </Space>
+          {hasDraft && (
+            <span className="pill pill-warn" style={{ flexShrink: 0 }}>
+              Taslak değişiklik
+            </span>
+          )}
+          {(document?.approvalCount ?? 0) > 0 && (
+            <span className="pill pill-ok" style={{ flexShrink: 0 }}>
+              <CheckOutlined style={{ fontSize: 10 }} /> {document!.approvalCount} onay
+            </span>
+          )}
+        </div>
+
+        <div className="row" style={{ gap: 8, alignItems: "stretch" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SegTabs<ViewMode>
+              value={mode}
+              onChange={setMode}
+              items={[
+                { key: "editor", label: "Doküman", icon: <FileTextOutlined /> },
+                {
+                  key: "comments",
+                  label: "Yorumlar",
+                  icon: <MessageOutlined />,
+                  count: openCount,
+                },
+                { key: "changes", label: "Değişiklikler", icon: <HistoryOutlined /> },
+                { key: "analytics", label: "Analitik", icon: <BarChartOutlined /> },
+              ]}
+            />
+          </div>
+          <div
+            className="row"
+            style={{
+              gap: 6,
+              flexShrink: 0,
+              paddingBottom: 6,
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+            }}
+          >
+            {mode === "editor" && (
+              <CommentNavigator
+                total={nav.openComments.length}
+                currentIndex={nav.currentIndex}
+                onPrev={nav.prev}
+                onNext={nav.next}
+              />
+            )}
+            <Tooltip title="Taslağı kaydet — henüz müşteriye açılmaz.">
+              <Button
+                size="small"
+                icon={<SaveOutlined />}
+                onClick={() => saveMut.mutate()}
+                loading={saveMut.isPending}
+              >
+                Kaydet
+              </Button>
+            </Tooltip>
+            <Tooltip title="Taslağı yeni müşteri sürümü olarak yayınla.">
+              <Button
+                type="primary"
+                size="small"
+                icon={<CloudUploadOutlined />}
+                onClick={() => setPublishOpen(true)}
+              >
+                Yayınla
+              </Button>
+            </Tooltip>
+            <Tooltip title="Word (.docx) indir">
+              <Button
+                size="small"
+                icon={<CloudDownloadOutlined />}
+                onClick={handleExport}
+                aria-label="Word export"
+              />
+            </Tooltip>
+          </div>
+        </div>
       </div>
 
-      <Row gutter={16}>
-        <Col xs={24} lg={15}>
-          <Card>
+      {/* Body */}
+      <div style={{ flex: 1, minHeight: 0, position: "relative", overflow: "hidden" }}>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            padding: "20px 24px",
+            visibility: mode === "editor" ? "visible" : "hidden",
+            pointerEvents: mode === "editor" ? "auto" : "none",
+          }}
+          aria-hidden={mode !== "editor"}
+        >
+          {!commentingAllowed && (
+            <div
+              className="card"
+              style={{
+                padding: "10px 14px",
+                marginBottom: 12,
+                maxWidth: 808,
+                margin: "0 auto 12px",
+                fontSize: 13,
+                color: "var(--ink-muted)",
+              }}
+            >
+              Bu doküman henüz yayınlanmadı. Yorumlar ve müşteri etkileşimi ilk{" "}
+              <strong>Yayınla</strong> sonrasında açılır.
+            </div>
+          )}
+          <div style={{ flex: 1, minHeight: 0 }}>
             <DocumentEditor
               ref={editorRef}
-              editable={isEditing}
-              initialJson={versionContent ? JSON.parse(versionContent.contentJson) : { type: "doc", content: [{ type: "paragraph" }] }}
+              editable
+              initialJson={
+                content
+                  ? safeParse(content.contentJson)
+                  : { type: "doc", content: [{ type: "paragraph" }] }
+              }
+              initialMarkdown={content?.contentMarkdown ?? ""}
               onBlockSelect={setSelectedBlock}
-              highlightedBlockIds={commentBlocks}
+              highlightedBlockIds={highlightedBlockIds}
+              commentBadges={commentBadges}
+              onBadgeClick={handleBadgeClick}
+              selectedBlockId={nav.focusBlockId}
+              activeSelectionBlockId={selectedBlock?.blockId ?? null}
+              onCommentRequest={handleCommentRequest}
             />
-            {!isEditing && activeVersion && (
-              <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
-                Bu versiyon {activeVersion.isPublished ? "published" : "geçmiş draft"} olduğundan salt okunurdur.
-                Yeni değişiklik yapmak için <a onClick={() => setSelectedVersionId(document?.currentDraftVersionId ?? null)}>güncel draft'a</a> geçin.
-              </Typography.Text>
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={9}>
-          <Tabs
-            items={[
-              {
-                key: "comments",
-                label: "Yorumlar",
-                children: (
-                  <CommentsPanel
-                    documentId={docId}
-                    versionId={activeVersionId ?? undefined}
-                    selectedBlock={selectedBlock}
-                    canComment={!!isEditing === false ? true : true}
-                    canResolve={true}
-                    onCommentsChange={(cs: Comment[]) => setCommentBlocks(new Set(cs.filter((c) => c.status === "Open").map((c) => c.blockId)))}
-                  />
-                ),
-              },
-              {
-                key: "versions",
-                label: "Versiyonlar",
-                children: (
-                  <Card size="small">
-                    <List
-                      dataSource={versions}
-                      renderItem={(v) => (
-                        <List.Item
-                          onClick={() => setSelectedVersionId(v.id)}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <Space>
-                            <Tag color={v.isPublished ? "green" : "default"}>V{v.versionNumber}</Tag>
-                            {v.isDraft && <Tag>Current Draft</Tag>}
-                            {v.isApproved && <Tag color="gold">Approved</Tag>}
-                            <Typography.Text type="secondary">{new Date(v.createdAt).toLocaleString()}</Typography.Text>
-                          </Space>
-                        </List.Item>
-                      )}
-                    />
-                  </Card>
-                ),
-              },
-              {
-                key: "analytics",
-                label: (
-                  <span>
-                    <BarChartOutlined /> Analitik
-                  </span>
-                ),
-                children: <AnalyticsView documentId={docId} />,
-              },
-            ]}
-          />
-        </Col>
-      </Row>
-    </Space>
+          </div>
+        </div>
+
+        {mode === "comments" && (
+          <div style={{ position: "absolute", inset: 0, overflow: "auto", padding: "20px 24px", background: "var(--canvas)" }}>
+            <CommentsPanel
+              documentId={docId}
+              focusBlockId={nav.focusBlockId}
+              onCommentSelect={nav.goTo}
+              blockTextMap={blockTextMap}
+            />
+          </div>
+        )}
+
+        {mode === "changes" && (
+          <div style={{ position: "absolute", inset: 0, overflow: "auto", background: "var(--canvas)" }}>
+            <ChangesView documentId={docId} />
+          </div>
+        )}
+
+        {mode === "analytics" && (
+          <div style={{ position: "absolute", inset: 0, overflow: "auto", background: "var(--canvas)" }}>
+            <AnalyticsView documentId={docId} />
+          </div>
+        )}
+      </div>
+
+      <Modal
+        open={publishOpen}
+        title="Müşteri Sürümü Yayınla"
+        onCancel={() => setPublishOpen(false)}
+        okText={`v${(document?.currentMajor ?? 0) + 1}.0 olarak yayınla`}
+        okButtonProps={{ type: "primary", icon: <CloudUploadOutlined /> }}
+        confirmLoading={publishMut.isPending}
+        onOk={() => publishMut.mutate()}
+        destroyOnHidden
+      >
+        <p style={{ marginTop: 0 }}>
+          Taslak içerik <strong>v{(document?.currentMajor ?? 0) + 1}.0</strong> olarak
+          yayınlanacak. Açık yorumlar <strong>açık kalmaya devam eder</strong> — yorumları
+          manuel olarak <em>Çözüldü</em> işaretleyerek kapatabilirsiniz.
+        </p>
+        <p className="subtle" style={{ fontSize: 13 }}>
+          İsteğe bağlı etiket — iç audit için (örn. &quot;şube onayı sonrası&quot;).
+        </p>
+        <Input
+          value={publishLabel}
+          onChange={(e) => setPublishLabel(e.target.value)}
+          placeholder="Etiket (opsiyonel)"
+          maxLength={256}
+        />
+      </Modal>
+
+      <CommentDrawer
+        state={
+          newCommentDrawer
+            ? {
+                kind: "new",
+                open: true,
+                documentId: docId,
+                blockId: newCommentDrawer.blockId,
+                anchorText: newCommentDrawer.anchorText,
+              }
+            : nav.drawer
+        }
+        onClose={() => {
+          if (newCommentDrawer) setNewCommentDrawer(null);
+          else nav.setDrawer({ kind: "closed" });
+        }}
+        threadNav={{
+          position: nav.currentIndex >= 0 ? nav.currentIndex + 1 : undefined,
+          total: nav.openComments.length,
+          onPrev: nav.prev,
+          onNext: nav.next,
+        }}
+      />
+    </div>
   );
+}
+
+function safeParse(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return { type: "doc", content: [{ type: "paragraph" }] };
+  }
 }

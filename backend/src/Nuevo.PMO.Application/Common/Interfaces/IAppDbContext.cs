@@ -14,9 +14,16 @@ public interface IAppDbContext
     DbSet<DocumentApproval> DocumentApprovals { get; }
     DbSet<Comment> Comments { get; }
     DbSet<CommentReply> CommentReplies { get; }
+    DbSet<DocumentBlockChange> DocumentBlockChanges { get; }
     DbSet<DocumentViewEvent> DocumentViewEvents { get; }
     DbSet<Invitation> Invitations { get; }
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<ProjectPlan> ProjectPlans { get; }
+    DbSet<PlanStep> PlanSteps { get; }
+    DbSet<PlanMilestone> PlanMilestones { get; }
+    DbSet<ProjectPlanSnapshot> ProjectPlanSnapshots { get; }
+    DbSet<ProjectReport> ProjectReports { get; }
+    DbSet<Notification> Notifications { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

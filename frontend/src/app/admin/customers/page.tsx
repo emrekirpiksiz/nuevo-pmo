@@ -1,37 +1,57 @@
 "use client";
 
 import {
+  App as AntdApp,
   Button,
-  Card,
   Form,
   Input,
   Modal,
+  Skeleton,
   Space,
-  Table,
-  Typography,
-  App as AntdApp,
-  Tag,
 } from "antd";
 import { PlusOutlined, SendOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CustomersApi } from "@/lib/apis";
 import { extractErrorMessage } from "@/lib/api";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { PageHeader } from "@/components/PageHeader";
+
+function initials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0])
+    .join("")
+    .toUpperCase();
+}
 
 export default function CustomersPage() {
   const qc = useQueryClient();
-  const { message, modal } = AntdApp.useApp();
+  const { message } = AntdApp.useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["customers"],
     queryFn: () => CustomersApi.list(),
   });
 
+  const filtered = useMemo(() => {
+    if (!search) return data ?? [];
+    const q = search.toLowerCase();
+    return (data ?? []).filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.contactEmail.toLowerCase().includes(q)
+    );
+  }, [data, search]);
+
   const createMut = useMutation({
-    mutationFn: (v: { name: string; contactEmail: string }) => CustomersApi.create(v.name, v.contactEmail),
+    mutationFn: (v: { name: string; contactEmail: string }) =>
+      CustomersApi.create(v.name, v.contactEmail),
     onSuccess: () => {
       message.success("Müşteri oluşturuldu.");
       setCreateOpen(false);
@@ -45,54 +65,115 @@ export default function CustomersPage() {
     onSuccess: (res) => {
       message.success("Davet gönderildi: " + res.email);
       setInviteOpen(null);
-      modal.info({
-        title: "Dev ortamı için davet URL",
-        content: (
-          <div>
-            <Typography.Paragraph copyable style={{ wordBreak: "break-all" }}>
-              {res.acceptUrl}
-            </Typography.Paragraph>
-          </div>
-        ),
-      });
+      qc.invalidateQueries({ queryKey: ["customers"] });
     },
     onError: (e) => message.error(extractErrorMessage(e)),
   });
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>Müşteriler</Typography.Title>
-        <Button icon={<PlusOutlined />} type="primary" onClick={() => setCreateOpen(true)}>
-          Yeni Müşteri
-        </Button>
-      </div>
-      <Card>
-        <Table
-          loading={isLoading}
-          rowKey="id"
-          dataSource={data}
-          pagination={{ pageSize: 20 }}
-          columns={[
-            { title: "Ad", dataIndex: "name", render: (v, row) => <Link href={`/admin/customers/${row.id}`}>{v}</Link> },
-            { title: "İletişim", dataIndex: "contactEmail" },
-            { title: "Kullanıcı", dataIndex: "userCount", width: 120, render: (v) => <Tag>{v}</Tag> },
-            { title: "Proje", dataIndex: "projectCount", width: 120, render: (v) => <Tag color="blue">{v}</Tag> },
-            {
-              title: "Aksiyon",
-              key: "actions",
-              width: 200,
-              render: (_, row) => (
-                <Space>
-                  <Button size="small" icon={<SendOutlined />} onClick={() => setInviteOpen(row.id)}>
-                    Davet
-                  </Button>
-                </Space>
-              ),
-            },
-          ]}
+    <div className="page">
+      <PageHeader
+        eyebrow={`Portföy · ${data?.length ?? 0} müşteri`}
+        title="Müşteriler"
+        description="Nuevo'nun aktif müşteri şirketleri. Her müşteri için kullanıcı ve proje sayılarını görebilir, davet gönderebilirsiniz."
+        actions={
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setCreateOpen(true)}
+          >
+            Yeni Müşteri
+          </Button>
+        }
+      />
+
+      <div className="row" style={{ marginBottom: 12 }}>
+        <Input.Search
+          placeholder="Müşteri ara…"
+          allowClear
+          style={{ width: 280 }}
+          onSearch={setSearch}
+          onChange={(e) => {
+            if (!e.target.value) setSearch("");
+          }}
         />
-      </Card>
+      </div>
+
+      <div className="card" style={{ overflow: "hidden" }}>
+        {isLoading ? (
+          <div style={{ padding: 24 }}>
+            <Skeleton active paragraph={{ rows: 6 }} />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 48, textAlign: "center" }} className="subtle">
+            Sonuç bulunamadı.
+          </div>
+        ) : (
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th style={{ paddingLeft: 20 }}>Müşteri</th>
+                <th>İletişim</th>
+                <th>Kullanıcı</th>
+                <th>Proje</th>
+                <th>Eklendi</th>
+                <th style={{ width: 120 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((c) => (
+                <tr key={c.id}>
+                  <td style={{ paddingLeft: 20 }}>
+                    <Link
+                      href={`/admin/customers/${c.id}`}
+                      style={{ color: "inherit", display: "block" }}
+                    >
+                      <div className="row" style={{ gap: 12 }}>
+                        <div
+                          className="av av-lg"
+                          style={{
+                            background: "var(--surface-muted)",
+                            color: "var(--ink)",
+                            border: "1px solid var(--border)",
+                            fontFamily: "var(--font-display)",
+                            fontSize: 15,
+                            fontWeight: 400,
+                          }}
+                        >
+                          {initials(c.name)}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 500, fontSize: 14 }}>{c.name}</div>
+                          <div className="subtle ellipsis" style={{ fontSize: 12 }}>
+                            {c.contactEmail}
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  </td>
+                  <td className="muted ellipsis" style={{ maxWidth: 240 }}>
+                    {c.contactEmail}
+                  </td>
+                  <td className="num mono">{c.userCount}</td>
+                  <td className="num mono">{c.projectCount}</td>
+                  <td className="muted mono" style={{ fontSize: 12 }}>
+                    {new Date(c.createdAt).toLocaleDateString("tr-TR")}
+                  </td>
+                  <td style={{ textAlign: "right", paddingRight: 16 }}>
+                    <Button
+                      size="small"
+                      icon={<SendOutlined />}
+                      onClick={() => setInviteOpen(c.id)}
+                    >
+                      Davet
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
 
       <CreateCustomerModal
         open={createOpen}
@@ -111,7 +192,10 @@ export default function CustomersPage() {
 }
 
 function CreateCustomerModal({
-  open, onClose, onSubmit, loading,
+  open,
+  onClose,
+  onSubmit,
+  loading,
 }: {
   open: boolean;
   onClose: () => void;
@@ -126,7 +210,7 @@ function CreateCustomerModal({
       onCancel={onClose}
       onOk={() => form.submit()}
       confirmLoading={loading}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form
         form={form}
@@ -139,7 +223,11 @@ function CreateCustomerModal({
         <Form.Item name="name" label="Müşteri Adı" rules={[{ required: true, max: 200 }]}>
           <Input />
         </Form.Item>
-        <Form.Item name="contactEmail" label="İletişim E-posta" rules={[{ required: true, type: "email" }]}>
+        <Form.Item
+          name="contactEmail"
+          label="İletişim E-posta"
+          rules={[{ required: true, type: "email" }]}
+        >
           <Input />
         </Form.Item>
       </Form>
@@ -148,7 +236,10 @@ function CreateCustomerModal({
 }
 
 function InviteModal({
-  customerId, onClose, onSubmit, loading,
+  customerId,
+  onClose,
+  onSubmit,
+  loading,
 }: {
   customerId: string | null;
   onClose: () => void;
@@ -163,9 +254,16 @@ function InviteModal({
       onCancel={onClose}
       onOk={() => form.submit()}
       confirmLoading={loading}
-      destroyOnClose
+      destroyOnHidden
     >
-      <Form form={form} layout="vertical" onFinish={(v) => { onSubmit(v.email); form.resetFields(); }}>
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={(v) => {
+          onSubmit(v.email);
+          form.resetFields();
+        }}
+      >
         <Form.Item name="email" label="E-posta" rules={[{ required: true, type: "email" }]}>
           <Input placeholder="user@customer.com" />
         </Form.Item>
