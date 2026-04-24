@@ -33,7 +33,7 @@ Proje aktif geliştirme aşamasında. Temel altyapı (auth, projeler, dokümanla
 - Migration: `20260422121431_ProjectPlanAndReports`, `20260423200344_AddNotifications`
 
 ### Frontend
-- AppShell + Sidebar + Topbar layout sistemi
+- AppShell + Sidebar + Topbar layout sistemi; `useCrumbsStore` (Zustand) ile sayfalar dinamik breadcrumb yazabilir
 - **Birleşik giriş ekranı** (`/admin/login`) — O365 + müşteri email/parola tek ekranda; `/` ve `/login` buraya redirect
 - **O365 callback sayfası** (`/admin/callback`) — PKCE state/verifier `sessionStorage` üzerinden
 - Admin: customers, projects, project detail, document editor
@@ -47,7 +47,8 @@ Proje aktif geliştirme aşamasında. Temel altyapı (auth, projeler, dokümanla
 - **NotificationsBell** (topbar çan + badge + popover dropdown, 30sn polling)
 - **InboxView** (`/admin/inbox` ve `/portal/inbox`) — filtreler (Tümü/Okunmamış/Yorumlar/Dokümanlar), proje bazlı gruplama, tek tek/toplu okundu
 - Admin stub sayfaları: `/admin/documents`, `/admin/comments`, `/admin/analytics`, `/admin/plan`, `/admin/reports`, `/admin/tickets`
-- **Polish**: Sidebar'da `nuevo-logo.svg` kullanımı; `exact` aktif-item fix (Panel+Projeler aynı anda aktif sorunu); Dokümanlar/Yorumlar menüden kaldırıldı; Workspace bölümü kaldırıldı, Raporlar/Tickets/Analitik primary'ye alındı; GlobalSearch (⌘K) command palette; Topbar'da müşteri tarafında search gizlendi; Müşteriden Beklenenler plan milestone'larından besleniyor; Son Aktiviteler notifications feed'den; Mail şablonları yenilendi; SEO title "Nuevo Project Management Portal (PMP)" yapıldı
+- **Polish**: Sidebar'da `nuevo-logo.svg` kullanımı; `exact` aktif-item fix; GlobalSearch (⌘K); Mail şablonları; SEO title güncellendi
+- **Doküman editörü polish** (son oturum): A4 kağıt görünümü; toolbar buton hiyerarşisi (Kaydet/Yayınla/Word); onay hover popover (kim/ne zaman/hangi sürüm); kaynak modunda arama (textarea setSelectionRange); kaynak görünümü dark kod editörü teması + satır numaraları; Tablo ekle butonu; breadcrumb'da proje adı + doküman adı; Word export'ta şirket başlığı + düzgün heading/bold/italic/kod stilleri
 
 ---
 
@@ -62,6 +63,7 @@ Proje aktif geliştirme aşamasında. Temel altyapı (auth, projeler, dokümanla
 
 ## 📋 Sıradaki Olası Adımlar
 
+- **Onay snapshot**: `DocumentApproval` şu an `documentVersionId` kaydediyor; versiyon içeriğine version endpointi üzerinden ulaşılabilir. Onay anındaki içerik snapshotını ayrı tablo olarak da saklama istenirse backend eklemesi gerekir.
 - Stub admin sayfalarını (`analytics`, `comments`, `plan`, `reports`) gerçek içerikle doldurma
 - Portal tarafında proje planı ve rapor görünümü (müşteri için)
 - Notification real-time (şu an 30sn polling; gerekirse SignalR/SSE)

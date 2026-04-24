@@ -6,6 +6,7 @@ import { useSession } from "@/lib/useSession";
 import { clearAuth } from "@/lib/auth";
 import { Sidebar, SidebarItem, SIDEBAR_ICONS } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { useCrumbsStore } from "@/lib/useCrumbsStore";
 
 interface Props {
   kind: "admin" | "customer";
@@ -65,6 +66,7 @@ export function AppShell({ kind, children, crumbs }: Props) {
   const { user, ready, isAuthenticated } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const storeCrumbs = useCrumbsStore((s) => s.crumbs);
 
   useEffect(() => {
     if (!ready) return;
@@ -83,8 +85,8 @@ export function AppShell({ kind, children, crumbs }: Props) {
   const primary = kind === "admin" ? ADMIN_PRIMARY : CUSTOMER_PRIMARY;
 
   const computedCrumbs = useMemo(
-    () => crumbs && crumbs.length > 0 ? crumbs : defaultCrumbs(pathname, kind),
-    [crumbs, pathname, kind]
+    () => storeCrumbs ?? (crumbs && crumbs.length > 0 ? crumbs : defaultCrumbs(pathname, kind)),
+    [storeCrumbs, crumbs, pathname, kind]
   );
 
   if (!ready || !isAuthenticated) {

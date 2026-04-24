@@ -32,6 +32,7 @@ import {
   LeftOutlined,
   RightOutlined,
   CloseOutlined,
+  TableOutlined,
 } from "@ant-design/icons";
 import { useEffect, useImperativeHandle, forwardRef, useCallback, useMemo, useRef, useState } from "react";
 import { htmlToMarkdown, markdownToHtml } from "./markdownHelpers";
@@ -49,9 +50,6 @@ export interface DocumentEditorHandle {
   setMode: (m: EditorMode) => void;
   /**
    * DOM'daki güncel blockId → textContent haritası.
-   * Çağrıldığında editor'un PM doc'unu gezerek blok içeriklerini çıkarır.
-   * Bu, yorumların JSON'daki blockId'leriyle DOM arasındaki uyumsuzluğu
-   * kapatmak için anchor-text eşleşmesi yapılırken kullanılır.
    */
   extractLiveBlockTextMap: () => Map<string, string>;
 
@@ -93,6 +91,11 @@ interface BadgePosition {
   left: number;
 }
 
+interface SourceMatch {
+  start: number;
+  end: number;
+}
+
 export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function DocumentEditor(
   {
     initialJson,
@@ -125,10 +128,12 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
   });
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Source-mode search state
+  const [sourceMatches, setSourceMatches] = useState<SourceMatch[]>([]);
+  const [sourceMatchIndex, setSourceMatchIndex] = useState(-1);
+
   const editor = useEditor({
     extensions: [
-      // StarterKit'ten block node'ları disable edip kendi blockId-destekli
-      // versiyonlarımızı kullanıyoruz (bkz. BlockIdExtension.ts).
       StarterKit.configure(STARTERKIT_DISABLED_NODES),
       ...BlockIdNodeExtensions,
       Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" } }),
@@ -157,7 +162,7 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
     setSourceValue(initialMarkdown ?? "");
   }, [initialMarkdown]);
 
-  // ----- Selection reporting (de-duplicated, stable callback) -----
+  // ----- Selection reporting -----
   const prevSelectionRef = useRef<{ blockId: string | null; text: string }>({ blockId: null, text: "" });
   const onBlockSelectRef = useRef(onBlockSelect);
   useEffect(() => { onBlockSelectRef.current = onBlockSelect; }, [onBlockSelect]);
@@ -169,7 +174,6 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
     const { from } = editor.state.selection;
     const $pos = editor.state.doc.resolve(from);
     let next: { blockId: string; text: string } | null = null;
-    // Prefer leaf-level block: iterate from deepest to shallowest
     for (let depth = $pos.depth; depth >= 0; depth--) {
       const node = $pos.node(depth);
       if (node.type.isBlock && node.attrs?.blockId) {
@@ -195,7 +199,7 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
     };
   }, [editor, reportSelection]);
 
-  // ----- Idempotent class toggles for highlight/active/selected on each block -----
+  // ----- Highlight class toggles -----
   const onBadgeClickRef = useRef(onBadgeClick);
   useEffect(() => { onBadgeClickRef.current = onBadgeClick; }, [onBadgeClick]);
 
@@ -221,32 +225,23 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
     return () => { editor.off("update", onUpdate); };
   }, [editor]);
 
-  // Apply highlight classes only (no DOM mutation for badges — those are rendered by React overlay).
   useEffect(() => {
     if (!editor) return;
     if (mode !== "preview") return;
     const dom = editor.view.dom as HTMLElement;
-
     const wantHighlight = new Set(highlightedBlockIds ?? []);
-
     const domObserver: { stop?: () => void; start?: () => void } = (editor.view as any).domObserver ?? {};
     try { domObserver.stop?.(); } catch { /* noop */ }
-
     try {
-      // Also drop any legacy badge spans that may have been injected by older code versions.
       dom.querySelectorAll(".comment-badge").forEach((el) => el.remove());
-
       dom.querySelectorAll("[data-block-id]").forEach((el) => {
         const he = el as HTMLElement;
         const id = he.getAttribute("data-block-id") ?? "";
-
         const wantHC = wantHighlight.has(id);
         if (he.classList.contains("has-comment") !== wantHC) he.classList.toggle("has-comment", wantHC);
-
         const wantSel = selectedBlockId === id;
         if (he.classList.contains("is-selected-comment") !== wantSel)
           he.classList.toggle("is-selected-comment", wantSel);
-
         const wantActive = activeSelectionBlockId === id;
         if (he.classList.contains("is-active-selection") !== wantActive)
           he.classList.toggle("is-active-selection", wantActive);
@@ -273,8 +268,6 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
       seen.add(b.blockId);
       const el = editorDom.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(b.blockId)}"]`);
       if (!el) continue;
-      // Prefer leaf block (deepest with same blockId is already unique since BlockIdExtension enforces uniqueness).
-      // Compute offset of the element relative to `inner` (which has position: relative).
       let top = 0;
       let left = 0;
       let cur: HTMLElement | null = el;
@@ -289,7 +282,7 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
         blockId: b.blockId,
         count: b.count,
         top: top + 4,
-        left: right - 44, // 40px badge + 4px margin
+        left: right - 44,
       });
     }
     setBadgePositions(positions);
@@ -341,9 +334,51 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, searchOpen]);
 
-  // Arama sorgusu değiştikçe extension state'ini güncelle — 180 ms debounce ile
-  // (büyük dokümanlarda her tuşa tam doküman taraması kilitlemesin).
+  // Source-mode: kaynak metinde eşleşen konuma git
+  const selectSourceMatch = useCallback((match: SourceMatch) => {
+    const ta = sourceRef.current;
+    if (!ta) return;
+    ta.focus();
+    ta.setSelectionRange(match.start, match.end);
+    // Tahmini satır sayısına göre scroll pozisyonunu hesapla
+    const linesBefore = sourceValue.substring(0, match.start).split("\n").length - 1;
+    const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 22;
+    const targetScroll = Math.max(0, linesBefore * lineHeight - ta.clientHeight / 3);
+    ta.scrollTop = targetScroll;
+  }, [sourceValue]);
+
+  // Arama sorgusu değiştikçe extension veya source state'ini güncelle
   useEffect(() => {
+    if (mode === "source") {
+      const q = searchQuery.trim();
+      if (!q) {
+        setSourceMatches([]);
+        setSourceMatchIndex(-1);
+        setSearchStatus({ matches: 0, current: -1 });
+        return;
+      }
+      const matches: SourceMatch[] = [];
+      const lowerSrc = sourceValue.toLowerCase();
+      const lowerQ = q.toLowerCase();
+      let pos = 0;
+      while (pos <= lowerSrc.length - lowerQ.length) {
+        const found = lowerSrc.indexOf(lowerQ, pos);
+        if (found === -1) break;
+        matches.push({ start: found, end: found + q.length });
+        pos = found + 1;
+      }
+      setSourceMatches(matches);
+      const idx = matches.length > 0 ? 0 : -1;
+      setSourceMatchIndex(idx);
+      setSearchStatus({ matches: matches.length, current: idx });
+      if (idx >= 0) {
+        // Bir sonraki render'da seç (textarea henüz güncel olmayabilir)
+        requestAnimationFrame(() => selectSourceMatch(matches[0]));
+      }
+      return;
+    }
+
+    // Preview mode: TipTap extension
     if (!editor) return;
     const q = searchQuery;
     const t = setTimeout(() => {
@@ -371,11 +406,13 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
     }, 180);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, editor]);
+  }, [searchQuery, mode, editor, sourceValue]);
 
   const closeSearch = () => {
     setSearchOpen(false);
     setSearchQuery("");
+    setSourceMatches([]);
+    setSourceMatchIndex(-1);
     if (editor) {
       editor.view.dispatch(
         editor.state.tr.setMeta(documentSearchPluginKey, {
@@ -389,6 +426,17 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
   };
 
   const stepSearch = (dir: 1 | -1) => {
+    if (mode === "source") {
+      if (sourceMatches.length === 0) return;
+      const n = sourceMatches.length;
+      const next = dir === 1
+        ? (sourceMatchIndex + 1) % n
+        : (sourceMatchIndex - 1 + n) % n;
+      setSourceMatchIndex(next);
+      setSearchStatus({ matches: n, current: next });
+      selectSourceMatch(sourceMatches[next]);
+      return;
+    }
     if (!editor) return;
     const s = documentSearchPluginKey.getState(editor.view.state);
     if (!s || s.matches.length === 0) return;
@@ -434,7 +482,6 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
         if (!editor) return;
         editor.commands.setContent(json as any, false);
         if (typeof markdown === "string") setSourceValue(markdown);
-        // Recompute positions after content changes (on next tick so DOM has updated)
         requestAnimationFrame(() => computeBadgePositions());
       },
       setContentFromMarkdown: (md) => {
@@ -449,10 +496,6 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
         const el = dom.querySelector(`[data-block-id="${CSS.escape(blockId)}"]`) as HTMLElement | null;
         if (!el) return;
         const wrapper = wrapperRef.current;
-
-        // Wrapper scroll'u + sub-topbar yüksekliğini hesaba kat. Block'u
-        // wrapper'ın üstünden ~120px (sticky header pay payı) aşağıya getir
-        // ki başlık altında görünür olsun, ortaya veya alta değil.
         const TOP_MARGIN = 120;
         if (wrapper) {
           const elRect = el.getBoundingClientRect();
@@ -462,7 +505,6 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
             wrapper.scrollTop + (elRect.top - wRect.top) - TOP_MARGIN
           );
           wrapper.scrollTop = target;
-          // 1 frame sonra doğrula — element viewport içinde mi?
           requestAnimationFrame(() => {
             const elRect2 = el.getBoundingClientRect();
             const wRect2 = wrapper.getBoundingClientRect();
@@ -481,7 +523,6 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
             el.scrollIntoView(true);
           }
         }
-
         dom.querySelectorAll(".block-flash").forEach((e) => e.classList.remove("block-flash"));
         el.classList.add("block-flash");
         setTimeout(() => el.classList.remove("block-flash"), 1200);
@@ -502,7 +543,6 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
         });
         return map;
       },
-
       setSearchQuery: (query, caseSensitive = false) => {
         if (!editor) return { matches: 0, current: -1 };
         try {
@@ -523,7 +563,6 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
         if (matches > 0) requestAnimationFrame(() => scrollSearchCurrent(editor));
         return { matches, current };
       },
-
       nextSearchMatch: () => {
         if (!editor) return;
         const s = documentSearchPluginKey.getState(editor.view.state);
@@ -534,7 +573,6 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
         );
         requestAnimationFrame(() => scrollSearchCurrent(editor));
       },
-
       prevSearchMatch: () => {
         if (!editor) return;
         const s = documentSearchPluginKey.getState(editor.view.state);
@@ -545,7 +583,6 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
         );
         requestAnimationFrame(() => scrollSearchCurrent(editor));
       },
-
       getSearchStatus: () => {
         if (!editor) return { matches: 0, current: -1, query: "" };
         const s = documentSearchPluginKey.getState(editor.view.state);
@@ -566,25 +603,71 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
     }
     if (next === mode) return;
     if (next === "source") {
+      let md = "";
       try {
-        const md = htmlToMarkdown(editor.getHTML());
-        setSourceValue(md);
+        md = htmlToMarkdown(editor.getHTML());
       } catch {
-        setSourceValue(editor.getText());
+        md = editor.getText();
       }
+
+      // Önizlemede seçili / imlecin üzerinde olduğu bloğun metnini bul
+      let blockText = "";
+      try {
+        const { from } = editor.state.selection;
+        const $pos = editor.state.doc.resolve(from);
+        for (let d = $pos.depth; d >= 0; d--) {
+          const node = $pos.node(d);
+          if (node.type.isBlock && node.textContent.trim().length > 0) {
+            blockText = node.textContent.slice(0, 80);
+            break;
+          }
+        }
+      } catch { /* ignore */ }
+
+      setSourceValue(md);
       setModeState("source");
+
+      // Textarea render olduktan sonra ilgili satıra konumlan
+      if (blockText) {
+        setTimeout(() => {
+          const ta = sourceRef.current;
+          if (!ta) return;
+          const searchFor = blockText.slice(0, 40).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const match = md.search(new RegExp(searchFor));
+          const idx = match >= 0 ? match : md.indexOf(blockText.slice(0, 20));
+          if (idx >= 0) {
+            ta.focus();
+            ta.setSelectionRange(idx, idx + blockText.length);
+            const linesBefore = md.substring(0, idx).split("\n").length - 1;
+            const lineHeight = 22; // 13px font * 1.7 satır yüksekliği ≈ 22px
+            ta.scrollTop = Math.max(0, linesBefore * lineHeight - ta.clientHeight / 3);
+          }
+        }, 60);
+      }
     } else {
       const html = markdownToHtml(sourceValue);
       editor.commands.setContent(html as any, false);
       setModeState("preview");
     }
+    // Mod değişince arama sıfırla
+    setSearchQuery("");
+    setSourceMatches([]);
+    setSourceMatchIndex(-1);
+    setSearchStatus({ matches: 0, current: -1 });
+  };
+
+  const insertTable = () => {
+    if (!editor) return;
+    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
   };
 
   if (!editor) return null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+      {/* Toolbar */}
+      <div style={{ padding: "10px 24px 10px", background: "var(--canvas)", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <Segmented
           size="small"
           value={mode}
@@ -619,25 +702,24 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
             <Tooltip title="Ordered list"><Button size="small" icon={<OrderedListOutlined />} onClick={() => editor.chain().focus().toggleOrderedList().run()} /></Tooltip>
             <Tooltip title="Code block"><Button size="small" icon={<CodeOutlined />} onClick={() => editor.chain().focus().toggleCodeBlock().run()} /></Tooltip>
             <Tooltip title="Quote"><Button size="small" onClick={() => editor.chain().focus().toggleBlockquote().run()}>❝</Button></Tooltip>
+            <Tooltip title="Tablo ekle (3×3)">
+              <Button size="small" icon={<TableOutlined />} onClick={insertTable} />
+            </Tooltip>
           </Space>
         )}
       </div>
+      </div>{/* /toolbar padding wrapper */}
 
+      {/* Arama çubuğu */}
       {searchOpen && (
         <div
           style={{
-            position: "sticky",
-            top: 0,
-            zIndex: 20,
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: 8,
-            padding: 8,
-            marginBottom: 8,
+            background: "var(--canvas)",
+            borderBottom: "1px solid var(--border)",
+            padding: "6px 24px",
             display: "flex",
             alignItems: "center",
             gap: 8,
-            boxShadow: "var(--shadow-sm)",
           }}
         >
           <SearchOutlined style={{ color: "var(--ink-subtle)" }} />
@@ -659,6 +741,20 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
             style={{ flex: 1, minWidth: 0 }}
             autoFocus
           />
+          {mode === "source" && searchStatus.matches > 0 && (
+            <span
+              style={{
+                fontSize: 11,
+                color: "var(--ink-subtle)",
+                background: "var(--accent-soft)",
+                padding: "1px 6px",
+                borderRadius: 4,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Kaynak modunda aranıyor
+            </span>
+          )}
           <span className="subtle mono" style={{ fontSize: 11, minWidth: 60, textAlign: "right" }}>
             {searchStatus.matches === 0
               ? searchQuery
@@ -688,73 +784,73 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
         </div>
       )}
 
-      <div ref={wrapperRef} style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-        {mode === "preview" ? (
-          <div
-            ref={innerRef}
-            style={{ position: "relative" }}
-            onContextMenu={(e) => {
-              if (!editor || !onCommentRequest) return;
-              const { from, to } = editor.state.selection;
-              // resolve the block at the selection's start
-              const $pos = editor.state.doc.resolve(from);
-              let blockId: string | null = null;
-              for (let d = $pos.depth; d >= 0; d--) {
-                const node = $pos.node(d);
-                if (node.type.isBlock && node.attrs?.blockId) { blockId = node.attrs.blockId as string; break; }
-              }
-              if (!blockId) return;
-              // Determine anchor text: prefer the highlighted selection text (up to 1000 chars),
-              // else the block's full text.
-              let anchorText = "";
-              if (from !== to) {
-                anchorText = editor.state.doc.textBetween(from, to, "\n").slice(0, 1000);
-              }
-              if (!anchorText) {
+      {/* İçerik alanı — A4 kağıt düzeni */}
+      <div ref={wrapperRef} style={{ flex: 1, minHeight: 0, overflow: "auto", background: "var(--surface-muted)" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px 48px" }}>
+          {mode === "preview" ? (
+            <div
+              ref={innerRef}
+              className="a4-paper"
+              onContextMenu={(e) => {
+                if (!editor || !onCommentRequest) return;
+                const { from, to } = editor.state.selection;
+                const $pos = editor.state.doc.resolve(from);
+                let blockId: string | null = null;
                 for (let d = $pos.depth; d >= 0; d--) {
                   const node = $pos.node(d);
-                  if (node.type.isBlock && node.attrs?.blockId === blockId) {
-                    anchorText = node.textContent.slice(0, 1000);
-                    break;
+                  if (node.type.isBlock && node.attrs?.blockId) { blockId = node.attrs.blockId as string; break; }
+                }
+                if (!blockId) return;
+                let anchorText = "";
+                if (from !== to) {
+                  anchorText = editor.state.doc.textBetween(from, to, "\n").slice(0, 1000);
+                }
+                if (!anchorText) {
+                  for (let d = $pos.depth; d >= 0; d--) {
+                    const node = $pos.node(d);
+                    if (node.type.isBlock && node.attrs?.blockId === blockId) {
+                      anchorText = node.textContent.slice(0, 1000);
+                      break;
+                    }
                   }
                 }
-              }
-              e.preventDefault();
-              setContextMenu({ x: e.clientX, y: e.clientY, blockId, anchorText });
-            }}
-          >
-            <EditorContent editor={editor} />
-            <div className="badge-overlay" aria-hidden="true">
-              {badgePositions.map((p) => (
-                <button
-                  key={p.blockId}
-                  className="comment-badge-react"
-                  style={{ top: p.top, left: p.left }}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onBadgeClickRef.current?.(p.blockId);
-                  }}
-                  title={`${p.count} yorum`}
-                  type="button"
-                >
-                  <MessageFilled />
-                  <span className="cb-count">{p.count}</span>
-                </button>
-              ))}
+                e.preventDefault();
+                setContextMenu({ x: e.clientX, y: e.clientY, blockId, anchorText });
+              }}
+            >
+              <EditorContent editor={editor} />
+              <div className="badge-overlay" aria-hidden="true">
+                {badgePositions.map((p) => (
+                  <button
+                    key={p.blockId}
+                    className="comment-badge-react"
+                    style={{ top: p.top, left: p.left }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onBadgeClickRef.current?.(p.blockId);
+                    }}
+                    title={`${p.count} yorum`}
+                    type="button"
+                  >
+                    <MessageFilled />
+                    <span className="cb-count">{p.count}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : (
-          <textarea
-            ref={sourceRef}
-            className="markdown-source"
-            value={sourceValue}
-            onChange={(e) => setSourceValue(e.target.value)}
-            readOnly={!editable}
-            placeholder="# Başlık\n\nMarkdown yazın..."
-            spellCheck={false}
-          />
-        )}
+          ) : (
+            <textarea
+              ref={sourceRef}
+              className="markdown-source"
+              value={sourceValue}
+              onChange={(e) => setSourceValue(e.target.value)}
+              readOnly={!editable}
+              placeholder="# Başlık&#10;&#10;Markdown yazın..."
+              spellCheck={false}
+            />
+          )}
+        </div>
       </div>
 
       {contextMenu && (
@@ -800,14 +896,12 @@ export const DocumentEditor = forwardRef<DocumentEditorHandle, Props>(function D
   );
 });
 
-// Search helper — aktif match'i viewport ortasına getirir.
 function scrollSearchCurrent(editor: ReturnType<typeof useEditor> extends infer T ? T : never) {
   const anyEditor = editor as unknown as import("@tiptap/react").Editor | null;
   if (!anyEditor) return;
   const dom = anyEditor.view.dom as HTMLElement;
   const current = dom.querySelector<HTMLElement>(".doc-search-hit.doc-search-current");
   if (!current) return;
-  // En yakın scroll container'ı bul
   let container: HTMLElement | null = dom.parentElement;
   while (container) {
     const style = window.getComputedStyle(container);

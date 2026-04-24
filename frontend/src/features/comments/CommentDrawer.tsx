@@ -58,11 +58,13 @@ interface Props {
   onClose: () => void;
   onCreated?: (comment: Comment) => void;
   threadNav?: ThreadNavProps;
+  /** Drawer'ın render edileceği DOM elementi. Geçilirse drawer o konteynere göre mutlak konumlanır. */
+  getContainer?: () => HTMLElement;
 }
 
-export function CommentDrawer({ state, onClose, onCreated, threadNav }: Props) {
-  if (state.kind === "new") return <NewCommentDrawer state={state} onClose={onClose} onCreated={onCreated} />;
-  if (state.kind === "thread") return <ThreadDrawer state={state} onClose={onClose} nav={threadNav} />;
+export function CommentDrawer({ state, onClose, onCreated, threadNav, getContainer }: Props) {
+  if (state.kind === "new") return <NewCommentDrawer state={state} onClose={onClose} onCreated={onCreated} getContainer={getContainer} />;
+  if (state.kind === "thread") return <ThreadDrawer state={state} onClose={onClose} nav={threadNav} getContainer={getContainer} />;
   return <Drawer open={false} onClose={onClose} />;
 }
 
@@ -70,10 +72,12 @@ function NewCommentDrawer({
   state,
   onClose,
   onCreated,
+  getContainer,
 }: {
   state: Extract<CommentDrawerMode, { kind: "new" }>;
   onClose: () => void;
   onCreated?: (c: Comment) => void;
+  getContainer?: () => HTMLElement;
 }) {
   const [body, setBody] = useState("");
   const { message } = AntdApp.useApp();
@@ -110,6 +114,8 @@ function NewCommentDrawer({
       destroyOnHidden
       mask={false}
       keyboard
+      getContainer={getContainer}
+      style={getContainer ? { position: "absolute" } : undefined}
     >
       <Space direction="vertical" style={{ width: "100%" }} size="middle">
         <div>
@@ -148,10 +154,12 @@ function ThreadDrawer({
   state,
   onClose,
   nav,
+  getContainer,
 }: {
   state: Extract<CommentDrawerMode, { kind: "thread" }>;
   onClose: () => void;
   nav?: ThreadNavProps;
+  getContainer?: () => HTMLElement;
 }) {
   const qc = useQueryClient();
   const { message } = AntdApp.useApp();
@@ -261,6 +269,8 @@ function ThreadDrawer({
       destroyOnHidden
       mask={false}
       keyboard
+      getContainer={getContainer}
+      style={getContainer ? { position: "absolute" } : undefined}
       extra={
         comment ? (
           <Space size={6}>

@@ -71,7 +71,9 @@ export function MilestonesView(props: Props) {
   ];
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    /* display:contents makes the group cards participate directly in the
+       parent grid/flex (plan-right-col or plan-milestones-row) */
+    <div style={{ display: "contents" }}>
       {groups.map((g) => (
         <MilestoneGroup
           key={g.type}
@@ -254,6 +256,7 @@ function MilestoneEditor({
 }) {
   return (
     <div className="milestone-editor">
+      {/* Line 1: title (full width) + reorder/delete actions */}
       <div className="milestone-editor-line">
         <Input
           size="small"
@@ -261,30 +264,8 @@ function MilestoneEditor({
           onChange={(e) => onChange({ title: e.target.value })}
           placeholder="Başlık"
           maxLength={256}
-          className="grow"
-        />
-        <Select
-          size="small"
-          value={m.status}
-          onChange={(v: PlanMilestoneStatus) =>
-            onChange({
-              status: v,
-              completedAt: v === "Done" ? new Date().toISOString() : null,
-            })
-          }
-          options={[
-            { value: "Pending", label: "Beklemede" },
-            { value: "Done", label: "Tamamlandı" },
-          ]}
-          style={{ width: 130 }}
-        />
-        <Input
-          size="small"
-          type="date"
-          value={toDateInput(m.deadline)}
-          onChange={(e) => onChange({ deadline: fromDateInput(e.target.value) })}
-          style={{ width: 148 }}
-          title="Deadline"
+          className="grow milestone-editor-title"
+          variant="borderless"
         />
         <Button
           size="small"
@@ -311,16 +292,40 @@ function MilestoneEditor({
           aria-label="Sil"
         />
       </div>
-      {m.description != null || m.title ? (
-        <Input.TextArea
-          value={m.description ?? ""}
-          onChange={(e) => onChange({ description: e.target.value || null })}
-          placeholder="Açıklama (opsiyonel)"
-          autoSize={{ minRows: 1, maxRows: 3 }}
-          maxLength={4000}
-          style={{ marginTop: 6 }}
+      {/* Line 2: status + deadline (subtle, stays aligned even in narrow column) */}
+      <div className="milestone-editor-meta">
+        <Select
+          size="small"
+          value={m.status}
+          onChange={(v: PlanMilestoneStatus) =>
+            onChange({
+              status: v,
+              completedAt: v === "Done" ? new Date().toISOString() : null,
+            })
+          }
+          options={[
+            { value: "Pending", label: "Beklemede" },
+            { value: "Done", label: "Tamamlandı" },
+          ]}
+          className="milestone-editor-status"
         />
-      ) : null}
+        <Input
+          size="small"
+          type="date"
+          value={toDateInput(m.deadline)}
+          onChange={(e) => onChange({ deadline: fromDateInput(e.target.value) })}
+          className="milestone-editor-date"
+          title="Deadline"
+        />
+      </div>
+      <Input.TextArea
+        value={m.description ?? ""}
+        onChange={(e) => onChange({ description: e.target.value || null })}
+        placeholder="Açıklama (opsiyonel)"
+        autoSize={{ minRows: 1, maxRows: 3 }}
+        maxLength={4000}
+        className="milestone-editor-desc"
+      />
     </div>
   );
 }

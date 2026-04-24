@@ -4,6 +4,7 @@ import { Button, Input, InputNumber, Select } from "antd";
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
+  CalendarOutlined,
   CaretDownOutlined,
   CaretRightOutlined,
   DeleteOutlined,
@@ -50,6 +51,13 @@ function arrangeTree(list: PlanStepLocal[]): PlanStepLocal[] {
   };
   for (const r of roots.slice().sort((a, b) => a.order - b.order)) walk(r);
   return out;
+}
+
+/** `2026-W17` → `H17 · 2026` (kısa, okunaklı). Boşsa null döner. */
+function formatYearWeek(v?: string | null): string | null {
+  const p = parseYearWeek(v);
+  if (!p) return null;
+  return `H${p.week} · ${p.year}`;
 }
 
 // ===== Week input (year-week picker) =====
@@ -105,11 +113,20 @@ export function PlanListEditor({
 }) {
   const arranged = arrangeTree(steps);
 
-  // Genişletilmiş satırların refKey'leri. Yeni eklenenler otomatik açılır.
+  // Genişletilmiş satırların refKey'leri. İlk yükleme daima kapalı; sadece kullanıcı + ile ekleyince yeni satır açılır.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const prevRefKeysRef = useRef<Set<string>>(new Set());
+  const hasSeenDataRef = useRef(false);
   useEffect(() => {
     const currentRefKeys = new Set(steps.map((s) => s.refKey));
+    // İlk kez non-empty listeyi görene kadar sadece kayıt tut, hiçbir şeyi açma.
+    // Bu; başta `steps=[]` → sonra dolu liste → "hepsi yeni" sanılıp auto-expand olmasını engeller.
+    if (!hasSeenDataRef.current) {
+      prevRefKeysRef.current = currentRefKeys;
+      if (currentRefKeys.size > 0) hasSeenDataRef.current = true;
+      return;
+    }
+    // Bundan sonra sadece kullanıcının eklediği yeni satırları aç.
     const added: string[] = [];
     for (const k of currentRefKeys) {
       if (!prevRefKeysRef.current.has(k)) added.push(k);
@@ -237,8 +254,10 @@ export function PlanListEditor({
               (behind ? " behind" : "")
             }
           >
-            {/* --- Compact header line --- */}
+            {/* --- Line 1: primary controls --- */}
             <div className="plan-row-line">
+              {isChild && <span className="plan-row-indent" />}
+
               <button
                 type="button"
                 className="plan-row-toggle"
@@ -248,12 +267,9 @@ export function PlanListEditor({
                 {isOpen ? <CaretDownOutlined /> : <CaretRightOutlined />}
               </button>
 
-              {behind && (
-                <WarningFilled
-                  className="plan-row-warn-icon"
-                  title="Adım NOW çizgisinin gerisinde"
-                />
-              )}
+              <span className="plan-row-warn-slot">
+                {behind && <WarningFilled title="Adım NOW çizgisinin gerisinde" />}
+              </span>
 
               <Input
                 size="small"
@@ -262,6 +278,7 @@ export function PlanListEditor({
                 placeholder={isChild ? "Alt adım başlığı" : "Adım başlığı"}
                 maxLength={256}
                 className="plan-row-title"
+                variant="borderless"
               />
 
               <Select
@@ -274,46 +291,8 @@ export function PlanListEditor({
                   { value: "Done", label: "Tamamlandı" },
                   { value: "Blocked", label: "Bloklu" },
                 ]}
-                style={{ width: 118 }}
+                style={{ width: 110 }}
               />
-
-              <YearWeekInput
-                value={s.startYearWeek}
-                onChange={(v) => update(s.refKey, { startYearWeek: v })}
-                style={{ width: 130 }}
-                compact
-              />
-              <span className="plan-row-sep">→</span>
-              <YearWeekInput
-                value={s.endYearWeek}
-                onChange={(v) => update(s.refKey, { endYearWeek: v })}
-                style={{ width: 130 }}
-                compact
-              />
-
-              <div className="plan-row-pct">
-                <div className="bar accent plan-row-bar">
-                  <span
-                    style={{
-                      width: `${Math.max(0, Math.min(100, s.progress))}%`,
-                    }}
-                  />
-                </div>
-                <InputNumber
-                  size="small"
-                  value={s.progress}
-                  onChange={(v) =>
-                    update(s.refKey, {
-                      progress: Math.max(0, Math.min(100, Number(v ?? 0))),
-                    })
-                  }
-                  min={0}
-                  max={100}
-                  className="plan-row-pct-input"
-                  formatter={(v) => `${v}%`}
-                  parser={(v) => Number((v ?? "").toString().replace("%", ""))}
-                />
-              </div>
 
               <div className="plan-row-actions">
                 <Button
@@ -352,71 +331,113 @@ export function PlanListEditor({
               </div>
             </div>
 
+            {/* --- Line 2: meta (dates + progress) — always visible, subtle --- */}
+            <div className="plan-row-meta">
+              <span className="plan-row-meta-label">
+                <CalendarOutlined style={{ fontSize: 11, marginRight: 4 }} />
+                {formatYearWeek(s.startYearWeek) || <span className="plan-row-meta-empty">—</span>}
+                <span className="plan-row-meta-sep">→</span>
+                {formatYearWeek(s.endYearWeek) || <span className="plan-row-meta-empty">—</span>}
+              </span>
+              <div className="bar accent plan-row-bar">
+                <span
+                  style={{
+                    width: `${Math.max(0, Math.min(100, s.progress))}%`,
+                  }}
+                />
+              </div>
+              <InputNumber
+                size="small"
+                value={s.progress}
+                onChange={(v) =>
+                  update(s.refKey, {
+                    progress: Math.max(0, Math.min(100, Number(v ?? 0))),
+                  })
+                }
+                min={0}
+                max={100}
+                className="plan-row-pct-input"
+                formatter={(v) => `${v}%`}
+                parser={(v) => Number((v ?? "").toString().replace("%", ""))}
+                variant="borderless"
+              />
+            </div>
+
             {/* --- Expanded details --- */}
             {isOpen && (
-              <div className="plan-row-expand">
+              <div className={"plan-row-expand" + (isChild ? " is-child" : "")}>
+                <div className="plan-row-expand-grid">
+                  <label className="plan-field">
+                    <span className="plan-field-label">Başlangıç haftası</span>
+                    <YearWeekInput
+                      value={s.startYearWeek}
+                      onChange={(v) => update(s.refKey, { startYearWeek: v })}
+                      compact
+                    />
+                  </label>
+                  <label className="plan-field">
+                    <span className="plan-field-label">Bitiş haftası</span>
+                    <YearWeekInput
+                      value={s.endYearWeek}
+                      onChange={(v) => update(s.refKey, { endYearWeek: v })}
+                      compact
+                    />
+                  </label>
+                  {showInternal && (
+                    <>
+                      <label className="plan-field">
+                        <span className="plan-field-label">
+                          Planlanan M/D <span className="subtle">(iç)</span>
+                        </span>
+                        <InputNumber
+                          size="small"
+                          value={s.plannedManDays ?? undefined}
+                          onChange={(v) =>
+                            update(s.refKey, {
+                              plannedManDays:
+                                v === null || v === undefined ? null : Number(v),
+                            })
+                          }
+                          min={0}
+                          max={10000}
+                          step={0.5}
+                          placeholder="—"
+                          style={{ width: "100%" }}
+                        />
+                      </label>
+                      <label className="plan-field">
+                        <span className="plan-field-label">
+                          Gerçekleşen M/D <span className="subtle">(iç)</span>
+                        </span>
+                        <InputNumber
+                          size="small"
+                          value={s.actualManDays ?? undefined}
+                          onChange={(v) =>
+                            update(s.refKey, {
+                              actualManDays:
+                                v === null || v === undefined ? null : Number(v),
+                            })
+                          }
+                          min={0}
+                          max={10000}
+                          step={0.5}
+                          placeholder="—"
+                          style={{ width: "100%" }}
+                        />
+                      </label>
+                    </>
+                  )}
+                </div>
                 <Input.TextArea
                   value={s.description ?? ""}
                   onChange={(e) =>
                     update(s.refKey, { description: e.target.value || null })
                   }
                   placeholder="Açıklama (opsiyonel)"
-                  autoSize={{ minRows: 1, maxRows: 4 }}
+                  autoSize={{ minRows: 2, maxRows: 5 }}
                   maxLength={4000}
+                  style={{ marginTop: 10 }}
                 />
-                {showInternal && (
-                  <div
-                    className="row"
-                    style={{ gap: 14, marginTop: 10, flexWrap: "wrap" }}
-                  >
-                    <label className="col" style={{ gap: 4 }}>
-                      <span className="kpi-label">
-                        Planlanan M/D
-                        <span className="subtle" style={{ marginLeft: 6, fontSize: 10 }}>
-                          (iç)
-                        </span>
-                      </span>
-                      <InputNumber
-                        size="small"
-                        value={s.plannedManDays ?? undefined}
-                        onChange={(v) =>
-                          update(s.refKey, {
-                            plannedManDays:
-                              v === null || v === undefined ? null : Number(v),
-                          })
-                        }
-                        min={0}
-                        max={10000}
-                        step={0.5}
-                        placeholder="—"
-                        style={{ width: 110 }}
-                      />
-                    </label>
-                    <label className="col" style={{ gap: 4 }}>
-                      <span className="kpi-label">
-                        Gerçekleşen M/D
-                        <span className="subtle" style={{ marginLeft: 6, fontSize: 10 }}>
-                          (iç)
-                        </span>
-                      </span>
-                      <InputNumber
-                        size="small"
-                        value={s.actualManDays ?? undefined}
-                        onChange={(v) =>
-                          update(s.refKey, {
-                            actualManDays:
-                              v === null || v === undefined ? null : Number(v),
-                          })
-                        }
-                        min={0}
-                        max={10000}
-                        step={0.5}
-                        placeholder="—"
-                        style={{ width: 110 }}
-                      />
-                    </label>
-                  </div>
-                )}
               </div>
             )}
           </div>

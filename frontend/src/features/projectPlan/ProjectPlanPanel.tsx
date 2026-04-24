@@ -277,10 +277,11 @@ export function ProjectPlanPanel({
         )}
       </div>
 
-      <div style={{ marginTop: 16 }}>
+      <div className="plan-main-content">
         {sub === "plan" && (
           <>
-            <div className="card" style={{ padding: 0, marginBottom: 16, overflow: "hidden" }}>
+            {/* Gantt — always full width */}
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
               <div className="card-head">
                 <h3 className="card-title" style={{ fontSize: 16 }}>
                   Plan Gantt
@@ -298,8 +299,9 @@ export function ProjectPlanPanel({
             </div>
 
             {mode === "admin" ? (
-              <>
-                <div className="card" style={{ padding: 0, marginBottom: 16 }}>
+              /* Admin: Steps (left) | Milestones (right) when ≥ 1140px */
+              <div className="plan-bottom-grid">
+                <div className="card" style={{ padding: 0 }}>
                   <div className="card-head">
                     <h3 className="card-title" style={{ fontSize: 16 }}>
                       Adımlar
@@ -316,16 +318,21 @@ export function ProjectPlanPanel({
                     />
                   </div>
                 </div>
-                <MilestonesView
-                  mode="edit"
-                  milestones={milestones}
-                  onChange={(m) => setDraftMilestones(m)}
-                />
-              </>
+
+                {/* Right column: milestone groups stacked */}
+                <div className="plan-right-col">
+                  <MilestonesView
+                    mode="edit"
+                    milestones={milestones}
+                    onChange={(m) => setDraftMilestones(m)}
+                  />
+                </div>
+              </div>
             ) : (
-              <>
+              /* Customer: milestones side-by-side when wide */
+              <div className="plan-milestones-row">
                 <MilestonesView mode="read" milestones={milestones} />
-              </>
+              </div>
             )}
           </>
         )}

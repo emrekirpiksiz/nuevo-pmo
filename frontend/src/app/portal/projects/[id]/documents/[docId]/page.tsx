@@ -35,6 +35,7 @@ import { computeEffectiveBlockIdMap } from "@/features/editor/effectiveBlockId";
 import { CommentNavigator } from "@/features/documents/CommentNavigator";
 import { ChangesView } from "@/features/documents/ChangesView";
 import { SegTabs } from "@/components/SegTabs";
+import { useCrumbsStore } from "@/lib/useCrumbsStore";
 
 type ViewMode = "editor" | "comments" | "changes" | "approvals";
 const EMPTY_COMMENTS: Comment[] = [];
@@ -46,6 +47,7 @@ export default function CustomerDocumentPage() {
   const projectId = params.id;
   const { message } = AntdApp.useApp();
   const qc = useQueryClient();
+  const { setCrumbs, clearCrumbs } = useCrumbsStore();
 
   const editorRef = useRef<DocumentEditorHandle>(null);
   const [mode, setMode] = useState<ViewMode>("editor");
@@ -77,6 +79,15 @@ export default function CustomerDocumentPage() {
   });
 
   useViewTracker(docId, !!content);
+
+  // Topbar breadcrumb güncelle
+  useEffect(() => {
+    if (document) {
+      setCrumbs(["Nuevo PMP", "Projeler", document.projectName, document.title]);
+    }
+    return () => clearCrumbs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [document?.id, document?.projectName, document?.title]);
 
   const [blockTextMap, setBlockTextMap] = useState<Map<string, string>>(new Map());
   const refreshBlockTextMap = useCallback(() => {
